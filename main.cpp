@@ -6,10 +6,9 @@
 #include <map>
 #include <list>
 #include <algorithm>
+#include <fstream>
 #include <unordered_map>
-
 using namespace std;
-
 enum spec{ // OR, CONCAT, and STAR integer values can be compared to establish precedence between op symbols
     RPAREN = -6,
     LPAREN,
@@ -24,7 +23,7 @@ enum tokenTypes{
     OPERATOR,
     DQUOTE,
     QUOTE,
-    BSLASH, // \
+    BSLASH,
     IDENTIFIER, // this could be name instead.
     INT,
     FLOAT,
@@ -34,16 +33,15 @@ enum tokenTypes{
     CLOSEBRACE, // }
     OPENBRACKET, // [
     CLOSEBRACKET, // ]
-    COMMA
+    COMMA,
+    INVALID
 }; // TODO Expand keywords into multiple individual categories.
-
 void accumulate(string& accumulator, queue<char>& output){
     for(char c: accumulator){
         output.push(c);
     }
     accumulator.clear();
 }
-
 queue<char> shuntingYard(string workingString){
     queue output = queue<char>();
     stack operators = stack<char>();
@@ -92,7 +90,6 @@ queue<char> shuntingYard(string workingString){
     }
     return output;
 }
-
 class state{
     public:
         static int statID;
@@ -101,20 +98,21 @@ class state{
             ++statID;
             isInitialState = false;
             isAcceptingState = false;
+            type = INVALID;
         }
         bool isInitialState, isAcceptingState;
-        bool const operator==(const state rhs){
+        bool operator==(const state& rhs) const{
             return (this->id == rhs.id);
         }
-        bool operator!=(const state rhs){
+        bool operator!=(const state& rhs) const{
             return !(*this == rhs);
         }
         int id;
         int type;
         map<char, vector<state>> transitions =  map<char, vector<state>>();
+        map<char, state> DFATransitions =  map<char, state>();
 };
 int state::statID = 0;
-
 pair<state, state> getNewNFA(){
     auto start = state();
     auto end = state();
@@ -124,7 +122,6 @@ pair<state, state> getNewNFA(){
     end.isAcceptingState = true;
     return {start, end};
 }
-
 pair<state, state> getNFA(char c){
     auto [start, end] = getNewNFA();
     auto v = vector<state>();
@@ -132,12 +129,10 @@ pair<state, state> getNFA(char c){
     start.transitions.insert({c, v});
     return {start, end};
 }
-
 void setInnerStates(pair<state, state> &NFA){
     NFA.first.isInitialState = false;
     NFA.second.isAcceptingState = false;
 }
-
 pair <state, state> unionNFAs(pair<state, state> NFA1, pair<state, state> NFA2){
     // make a new NFA with lambda transitions to the argument NFAs (lamba = -1)
     auto [start, end] = getNewNFA();
@@ -179,7 +174,6 @@ pair <state, state> closeNFA(pair<state, state> NFA) {
     start.transitions.at(LAMBDA).push_back(NFA.first);
     return {start, end};
 }
-// TODO list a type in each of the isAcceptingState states for the nfa's returned by this function that is indicative of the token type
 pair<state,state> toNFA(queue<char> input){
     state start;
     start.isInitialState = true;
@@ -218,7 +212,7 @@ pair<state,state> toNFA(queue<char> input){
     //return the start and end state of the completed nfa for this pattern
     return {s.top().first, s.top().second};
 }
-list<state> followEpsilon(state initialState) {
+list<state> followEpsilon(const state &initialState) {
     try {
         auto tvec = initialState.transitions.at(LAMBDA);
         list<state> epsilon;
@@ -230,7 +224,7 @@ list<state> followEpsilon(state initialState) {
         return {};
     }
 }
-list<state> Delta(state nState, char c) {
+list<state> Delta(const state &nState, char c) {
     list<state> ret;
     try {
         auto vec = nState.transitions.at(c);
@@ -249,8 +243,7 @@ list<state> Delta(state nState, char c) {
     }
     return ret;
 }
-
-int compareQ(list<state> lhs, list<state> rhs) {
+bool compareQ(list<state> lhs, list<state> rhs) {
     if (lhs.size() != rhs.size()) return false;
     bool ret = true;
     for (auto i = lhs.begin(), k = rhs.begin(); i != lhs.end() && ret; next(i,1), next(k,1)) {
@@ -258,35 +251,23 @@ int compareQ(list<state> lhs, list<state> rhs) {
     }
     return ret;
 }
-int Qcontains(const list<list<state>> Q, list<state> Qitem) {
-    bool ret = 0;
-    int count = 0;
+bool Qcontains(const list<list<state>>& Q, const list<state>& Qitem) {
+    bool ret = false;
+
     for (auto q: Q) {
-        ret &= compareQ(q, Qitem);
-        if (!ret){ break;}
-        ++count;
+        ret |= compareQ(q, Qitem);
+        if (ret){ return true;}
     }
-    if (count == Q.size()) return -1;
-    return count;
+    return ret;
 }
-
-// from medium, https://medium.com/@gulshansharma014/call-to-implicitly-deleted-default-constructor-of-unordered-map-pair-int-int-int-d3b2a6da0b41
-// Modified by me
-struct PairHash {
-    template <class T1, class T2>
-    std::size_t operator() (const std::pair<T1, T2>& p) const {
-        auto h1 = std::hash<T1>{}(p.first);
-        auto h2 = std::hash<T2>{}(p.second);
-        return h1 ^ h2;
-    }
-};
-
-int main() {
+vector<state> ScannerGenerator() {
     // a(a+b)*b -> aab+*.b. => "a.(a+b)*.b"
     // Does not properly parse statements like ab* or (a+b)a+b where an implicit subexpr is operated on unless concatenation is specified explicitly.
     // TODO seek to endl for single line comments or to closing */ for multiline when encountered.
     auto NFAs = vector<pair<state,state>>();
-    // Todo preprocessor for concatenation symbol push_backion
+    // Todo preprocessor for concatenation symbol insertion
+
+
     string s[16] = {R"(\\.n + \\.r + \\.v + \\.f)", // ENDL,
                     "r.e.t.u.r.n + p.r.o.c.e.d.u.r.e + i.s.h + n.u.m", // KEYWORD,
                     "\\+ + / + ^ + \\* + - + =", // OPERATOR,
@@ -306,29 +287,30 @@ int main() {
     };
 
 
+
     static int i = 0; // slightly easier than changing this to an indexed loop
     for(string lstr : s){
         char c;
         string string1;
-        for (int i = 0; i < lstr.length(); ++i) {
-            c = lstr[i];
+        for (int j = 0; j < lstr.length(); ++j) {
+            c = lstr[j];
             if (c == '\\') { // allow specification of literal symbols TODO check
-                ++i; // skip the slash
-                string1 += lstr[i]; // add character following the slash to the expression.
+                ++j; // skip the slash
+                string1 += lstr[j]; // add character following the slash to the expression.
                 continue;
             }
             if (c == '.') {
-                string1 += CONCAT;
+                string1 += (char) CONCAT;
             } else if (c == '+') {
-                string1 += OR;
+                string1 += (char) OR;
             } else if (c == '*') {
-                string1 += STAR;
+                string1 += (char) STAR;
             } else if (c == '(') {
-                string1 += LPAREN;
+                string1 += (char) LPAREN;
             } else if (c == ')') {
-                string1 += RPAREN;
+                string1 += (char) RPAREN;
             } else {
-                string1 += lstr[i];
+                string1 += lstr[j];
             }
         }
 
@@ -359,36 +341,146 @@ int main() {
     auto Q = list<list<state>>();
     auto workList = queue<list<state>>();
     auto q_0 = list<state>();
+    vector<state> DFA_states;
 
-    unordered_map<pair<int, char>, int, PairHash> umap;
-
-    q_0.push_back(newStartState);
+    q_0 = followEpsilon(newStartState);
     Q.push_back(q_0);
     workList.push(q_0);
-    int q_index = 0;
-    int qn_index;
+    int Q_index = 0;
+    auto DFAStartState = state();
+    DFAStartState.isInitialState = true;
+    DFA_states.push_back(DFAStartState);
+
     while(!workList.empty()) {
         auto q = workList.front();
         workList.pop();
-        for (state curr : q) {
-            for (int k = 32; k < 127; ++k) { // every character in our alphabet
-                try {
-                    auto temp = Delta(curr,((char) k));
-                    if (temp.empty()) continue;
-                    qn_index = Qcontains(Q, temp);
-                    if (qn_index == -1) {
-                        Q.push_back(temp);
-                        workList.push(temp);
-                        umap.insert({{q_index,k} ,q_index + 1});
-                    }else {
-                        umap.insert({{q_index,k} ,qn_index});
+
+        auto tempState = state();
+        for (int k = 32; k < 127; ++k) { // every character in our alphabet
+            for (state curr : q) {
+                auto temp = Delta(curr,((char) k));
+                if (temp.empty()) continue; // error state
+                if (!Qcontains(Q, temp)) { // this is a new DFA state
+                    Q.push_back(temp);
+                    workList.push(temp);
+                    for (state currState : temp) {
+                        if (currState.isAcceptingState) {
+                            tempState.type = currState.type;
+                            tempState.isAcceptingState = true;
+                            break;
+                        }
                     }
-                }catch (exception &e) {
-                    continue;
+                    DFA_states.push_back(tempState);
                 }
+
+                DFA_states[Q_index].DFATransitions.insert({k, tempState});
             }
         }
+        ++Q_index;
     }
-    // non-minimal DFA represented by table T (which happens to be a map)
+    return DFA_states;
+}
+int getIndexOf(const vector<state>& states, const state& arg) {
+        for (int i = 0; i < states.size(); ++i) {
+            if (states[i] == arg) {
+                return i;
+            }
+        }
+    return -1;
+}
+void truncate(string& lexeme) {
+    lexeme = lexeme.substr(0, lexeme.length() - 1); // TODO verify
+}
+tuple<int, int, string> scanner(const string& input) {
+    // non-minimal DFA represented by an array of states DFA_states TODO minimize
+    static auto scannerTable = ScannerGenerator();
+    static int streamPos = 0;
+    static state error = state();
+    auto Stack = stack<pair<state, int>>();
+    static vector<vector<bool>> Failed = vector<vector<bool>>(input.length(), vector<bool>(scannerTable.size(), false));
+    static state bad = state();
+    bad.id = -1;
+
+    string lexeme;
+    auto currentState = scannerTable[0];
+    char c;
+    Stack.push({bad, -1});
+
+    while (currentState != bad) {
+        if (Failed[getIndexOf(scannerTable, currentState)][streamPos]) {
+            currentState = Stack.top().first;
+            streamPos = Stack.top().second;
+            Stack.pop();
+            truncate(lexeme);
+            break; //TODO
+        }
+        c = input[streamPos]; // get character from the inputstream at index streamPos
+        lexeme += c; // concatenate the character to lexeme
+        if (currentState.isAcceptingState) {
+            Stack = stack<pair<state, int>>();
+            Stack.push({bad, -1});
+        }
+        Stack.push({currentState, streamPos});
+        try {
+            currentState = currentState.DFATransitions.at(c);
+        }catch (exception &e) {
+            currentState = error;
+        }
+        ++streamPos;
+    }
+    while (!currentState.isAcceptingState && currentState != bad) {
+        if (currentState != error) {
+            Failed[getIndexOf(scannerTable, currentState)][streamPos] = true;
+        }
+        currentState = Stack.top().first;
+        streamPos = Stack.top().second;
+        Stack.pop();
+        if (currentState != bad) {
+            truncate(lexeme);
+        }
+    }
+    if (currentState.isAcceptingState) {
+        return {streamPos, currentState.type, lexeme};
+    }else{
+        return {streamPos, INVALID, lexeme};
+    }
+}
+int main() {
+    ifstream f;
+
+    string tokenIdstrings[] = { "ENDL",
+    "KEYWORD",
+    "OPERATOR",
+    "DQUOTE",
+    "QUOTE",
+    "BSLASH",
+    "IDENTIFIER", // this could be name instead.
+    "INT",
+    "FLOAT",
+    "OPENPAREN", // (
+    "CLOSEPAREN", // )
+    "OPENBRACE", // {
+    "CLOSEBRACE", // }
+    "OPENBRACKET", // [
+    "CLOSEBRACKET", // ]
+    "COMMA",
+    "INVALID"};
+
+    f.open("parser_text_hw2.txt");
+    if(!f.is_open()) {
+        cout<< "The file referenced in the CLI arguments did not exist in the current directory. Resolve this issue and try again.";
+        return -1;
+    }
+    int size = 3400;
+    string input = string(size, '\0');
+    f.seekg(ios::beg);
+    f.read(&input[0], size);
+    f.close();
+
+    while (size >= 0) {
+        auto token = scanner(input);
+        cout << '<'<< tokenIdstrings[get<1>(token)] << ", " << get<2>(token) << '>' << '\n';
+        size -= get<0>(token);
+    }
     return 0;
 }

@@ -3,6 +3,4 @@ project(assignment1)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(assignment1 main.cpp
-        RegExScanner.cpp
-        RegExScanner.h)
+add_executable(assignment1 main.cpp)

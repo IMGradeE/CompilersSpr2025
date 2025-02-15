@@ -1,9 +1,0 @@
-//
-// Created by wilke on 1/25/2025.
-//
-
-#ifndef ASSIGNMENT1_REGEXSCANNER_H
-#define ASSIGNMENT1_REGEXSCANNER_H
-
-
-#endif //ASSIGNMENT1_REGEXSCANNER_H
