@@ -7,7 +7,6 @@
 #include <list>
 #include <algorithm>
 #include <fstream>
-#include <unordered_map>
 using namespace std;
 enum spec{ // OR, CONCAT, and STAR integer values can be compared to establish precedence between op symbols
     RPAREN = -6,
@@ -92,98 +91,93 @@ queue<char> shuntingYard(string workingString){
 }
 class state{
     public:
-        static int statID;
+        int id;
         state() {
             id = statID;
             ++statID;
-            isInitialState = false;
+
             isAcceptingState = false;
             type = INVALID;
         }
-        bool isInitialState, isAcceptingState;
-        bool operator==(const state& rhs) const{
+        bool  isAcceptingState;
+        bool operator==(const state &rhs) const{
             return (this->id == rhs.id);
         }
-        bool operator!=(const state& rhs) const{
+        bool operator!=(const state &rhs) const{
             return !(*this == rhs);
         }
-        int id;
+        static int statID;
         int type;
-        map<char, vector<state>> transitions =  map<char, vector<state>>();
-        map<char, state> DFATransitions =  map<char, state>();
+        map<char, vector<state*>> transitions =  map<char, vector<state*>>();
+        map<char, state*> DFATransitions =  map<char, state*>();
 };
 int state::statID = 0;
-pair<state, state> getNewNFA(){
-    auto start = state();
-    auto end = state();
-    start.isInitialState = true;
-    start.isAcceptingState = false;
-    end.isInitialState = false;
-    end.isAcceptingState = true;
+pair<state*, state*> getNewNFA(){
+    auto start = new state();
+    auto end = new state();
     return {start, end};
 }
-pair<state, state> getNFA(char c){
+pair<state*, state*> getNFA(char c){
     auto [start, end] = getNewNFA();
-    auto v = vector<state>();
+    auto v = vector<state*>();
     v.push_back(end);
-    start.transitions.insert({c, v});
+    start->transitions.insert({c, v});
     return {start, end};
 }
-void setInnerStates(pair<state, state> &NFA){
-    NFA.first.isInitialState = false;
-    NFA.second.isAcceptingState = false;
+void setInnerStates(pair<state*, state*> &NFA){
+
+    NFA.second->isAcceptingState = false;
 }
-pair <state, state> unionNFAs(pair<state, state> NFA1, pair<state, state> NFA2){
+pair <state*, state*> unionNFAs(pair<state*, state*> NFA1, pair<state*, state*> NFA2){
     // make a new NFA with lambda transitions to the argument NFAs (lamba = -1)
     auto [start, end] = getNewNFA();
-    auto sv = vector<state>(); // isInitialState transition function vector
-    auto ev = vector<state>(); // isAcceptingState transition function vector TODO MAYBE UNUSED
+    auto sv = vector<state*>(); // isInitialState transition function vector
     sv.push_back(NFA1.first); // push the isInitialState state of NFA1 into starts' lambda transition function vector
     sv.push_back(NFA2.first); // push the isInitialState state of NFA2 into starts' lambda transition function vector
-    start.transitions.insert({LAMBDA, sv}); // insert with key LAMBDA
+    start->transitions.insert({LAMBDA, sv}); // insert with key LAMBDA
 
-    NFA1.second.transitions.insert({LAMBDA, vector<state>(1, end)}); // add a lambda transition from NFA1's isAcceptingState state to the new common isAcceptingState state
-    NFA2.second.transitions.insert({LAMBDA, vector<state>(1, end)}); // add a lambda transition from NFA2's isAcceptingState state to the new common isAcceptingState state
+    NFA1.second->transitions.insert({LAMBDA, vector<state*>(1, end)}); // add a lambda transition from NFA1's isAcceptingState state to the new common isAcceptingState state
+    NFA2.second->transitions.insert({LAMBDA, vector<state*>(1, end)}); // add a lambda transition from NFA2's isAcceptingState state to the new common isAcceptingState state
     // clean up NFA 1&2
     setInnerStates(NFA1);
     setInnerStates(NFA2);
     return {start, end};
 }
-pair <state, state> concatNFAs(pair<state, state> NFA1, pair<state, state> NFA2){
+pair <state*, state*> concatNFAs(pair<state*, state*>& NFA1, const pair<state*, state*> &NFA2){
     // make NFA1's isAcceptingState state the same as NFA2's isInitialState state.
-    NFA1.second.isAcceptingState = false; // isAcceptingState state no longer marked as isAcceptingState state
-    NFA2.first.isInitialState = false; // isInitialState state no longer marked as isInitialState state
-    // naive implementation is just to lambda transition from the old isAcceptingState of NFA1 to the old isInitialState of NFA2 so that's what I'm doing
-    auto sv = vector<state>();
-    sv.push_back(NFA2.first); // push the isInitialState state of NFA2 into the transition function vector for NFA1's old isAcceptingState state
+    NFA1.second->isAcceptingState = false; // isAcceptingState state no longer marked as isAcceptingState state
 
-    NFA1.second.transitions.insert({LAMBDA, sv});
-    // new <isInitialState, isAcceptingState> pair of states for this machine is NFA1.first and NFA2.second
+    // naive implementation is just to lambda transition from the old isAcceptingState of NFA1 to the old isInitialState of NFA2 so that's what I'm doing
+
+    NFA1.second->transitions.insert({LAMBDA, vector<state*>(1, NFA2.first)});
+
     return {NFA1.first, NFA2.second};
 }
-pair <state, state> closeNFA(pair<state, state> NFA) {
+pair <state*, state*> closeNFA(pair<state*, state*> NFA) {
     auto [start, end] = getNewNFA();
-    NFA.second.isAcceptingState = false;
-    NFA.first.isInitialState = false;
-    NFA.second.transitions.insert({LAMBDA, vector<state>(1,
-                                                         NFA.first)}); // insert a transition from NFAs' old isAcceptingState state to its isInitialState state via lambda
-    NFA.second.transitions.at(LAMBDA).push_back(
-            end); // add a lambda transition from the old isAcceptingState state to the new isAcceptingState state
+    NFA.second->isAcceptingState = false;
 
-    start.transitions.insert({LAMBDA, vector<state>(1, end)});
-    start.transitions.at(LAMBDA).push_back(NFA.first);
+    // insert a transition from NFAs' old isAcceptingState state to its isInitialState state via lambda
+    NFA.second->transitions.insert({LAMBDA, vector<state*>(1, NFA.first)});
+     // add a lambda transition from the old isAcceptingState state to the new isAcceptingState state
+    NFA.second->transitions.at(LAMBDA).push_back(end);
+
+    start->transitions.insert({LAMBDA, vector<state*>(1, end)});
+    start->transitions.at(LAMBDA).push_back(NFA.first);
     return {start, end};
 }
-pair<state,state> toNFA(queue<char> input){
-    state start;
-    start.isInitialState = true;
+pair<state*,state*> toNFA(queue<char> input){
+    state* start;
 
 
-    auto s = stack<pair<state, state>>();
+    auto s = stack<pair<state*, state*>>();
     char c;
     while(!input.empty()){
         c = input.front();
         input.pop();
+        if(isspace(c)){
+            continue;
+        }
         if (c >= 0){ // symbol
             // generate NFA for this symbol
             // push NFA onto stack<pair<state_1,state_n>>
@@ -212,11 +206,11 @@ pair<state,state> toNFA(queue<char> input){
     //return the start and end state of the completed nfa for this pattern
     return {s.top().first, s.top().second};
 }
-list<state> followEpsilon(const state &initialState) {
+list<state*> followEpsilon(const state *initialState) {
     try {
-        auto tvec = initialState.transitions.at(LAMBDA);
-        list<state> epsilon;
-        for (state& s : tvec) {
+        auto tvec = initialState->transitions.at(LAMBDA);
+        list<state*> epsilon;
+        for (state* &s : tvec) {
             epsilon.push_back(s);
         }
         return epsilon;
@@ -224,12 +218,12 @@ list<state> followEpsilon(const state &initialState) {
         return {};
     }
 }
-list<state> Delta(const state &nState, char c) {
-    list<state> ret;
+list<state*> Delta(const state* nState, char c) {
+    list<state*> ret;
     try {
-        auto vec = nState.transitions.at(c);
+        auto vec = nState->transitions.at(c);
         // follow epsilon from each element accessible via this character
-        for (state& s : vec) {
+        for (state* &s : vec) {
            ret.push_back(s);
         }
         for (int i = 0; i < vec.size(); i++) {
@@ -243,32 +237,32 @@ list<state> Delta(const state &nState, char c) {
     }
     return ret;
 }
-bool compareQ(list<state> lhs, list<state> rhs) {
+bool compareQ(list<state*> lhs, list<state*> rhs) {
     if (lhs.size() != rhs.size()) return false;
     bool ret = true;
-    for (auto i = lhs.begin(), k = rhs.begin(); i != lhs.end() && ret; next(i,1), next(k,1)) {
+    for (auto i = lhs.begin(), k = rhs.begin(); i != lhs.end(); next(i,1), next(k,1)) {
         ret &= (*i == *k);
     }
     return ret;
 }
-bool Qcontains(const list<list<state>>& Q, const list<state>& Qitem) {
-    bool ret = false;
-
-    for (auto q: Q) {
-        ret |= compareQ(q, Qitem);
-        if (ret){ return true;}
+int Qcontains(const list<list<state*>>& Q, const list<state*>& Qitem) {
+    int count = 0;
+    for (auto &q: Q) {
+        if (compareQ(q, Qitem)){ return count;}
+        ++count;
     }
-    return ret;
+    return -1;
 }
-vector<state> ScannerGenerator() {
+vector<state*> ScannerGenerator() {
     // a(a+b)*b -> aab+*.b. => "a.(a+b)*.b"
     // Does not properly parse statements like ab* or (a+b)a+b where an implicit subexpr is operated on unless concatenation is specified explicitly.
     // TODO seek to endl for single line comments or to closing */ for multiline when encountered.
-    auto NFAs = vector<pair<state,state>>();
+    auto NFAs = vector<pair<state*,state*>>();
     // Todo preprocessor for concatenation symbol insertion
+    string s[1] = {"a.(b+c)*"};
 
-
-    string s[16] = {R"(\\.n + \\.r + \\.v + \\.f)", // ENDL,
+    /*string s[16] = {
+                    "\\\\.n + \\\\.r + \\\\.v + \\\\.f", // ENDL,
                     "r.e.t.u.r.n + p.r.o.c.e.d.u.r.e + i.s.h + n.u.m", // KEYWORD,
                     "\\+ + / + ^ + \\* + - + =", // OPERATOR,
                     "\"", // DQUOTE,
@@ -285,6 +279,7 @@ vector<state> ScannerGenerator() {
                     "]", // CLOSEBRACKET // ]
                     ",", //COMMA
     };
+    */
 
 
 
@@ -326,61 +321,65 @@ vector<state> ScannerGenerator() {
             else cout << str;
         }*/
         auto NFA = toNFA(postfixPattern);
-        NFA.second.type = (tokenTypes) i; // why am I casting this? I don't remember the reason but I remember this being helpful in some way... lol.
+        NFA.second->type = i;
+        NFA.second->isAcceptingState = true;
         ++i;
         NFAs.push_back(NFA);
     }
-    auto startStates = vector<state>(NFAs.size());
+    auto startStates = vector<state*>();
     for (int j = 0; j < NFAs.size(); ++j) {
         startStates.push_back(NFAs[j].first);
     }
-    auto newStartState = state();
+    auto newStartState = new state();
 
-    newStartState.transitions.insert({LAMBDA, startStates});
+    newStartState->transitions.insert({LAMBDA, startStates});
     // convert to dfa, preserve end states
-    auto Q = list<list<state>>();
-    auto workList = queue<list<state>>();
-    auto q_0 = list<state>();
-    vector<state> DFA_states;
+    auto Q = list<list<state*>>();
+    auto workList = queue<list<state*>>();
+    auto q_0 = list<state*>();
+    vector<state*> DFA_states;
 
     q_0 = followEpsilon(newStartState);
     Q.push_back(q_0);
     workList.push(q_0);
     int Q_index = 0;
-    auto DFAStartState = state();
-    DFAStartState.isInitialState = true;
+    auto DFAStartState = new state();
+
     DFA_states.push_back(DFAStartState);
 
+    auto tempState = new state();
     while(!workList.empty()) {
         auto q = workList.front();
         workList.pop();
-
-        auto tempState = state();
-        for (int k = 32; k < 127; ++k) { // every character in our alphabet
-            for (state curr : q) {
+        for (int k = 33; k < 127; ++k) { // every character in our alphabet
+            for (state* curr : q) {
                 auto temp = Delta(curr,((char) k));
-                if (temp.empty()) continue; // error state
-                if (!Qcontains(Q, temp)) { // this is a new DFA state
+                if (temp.empty())
+                    continue; // error state
+                int index = Qcontains(Q, temp);
+                if (index == -1) { // this is a new DFA state
                     Q.push_back(temp);
                     workList.push(temp);
-                    for (state currState : temp) {
-                        if (currState.isAcceptingState) {
-                            tempState.type = currState.type;
-                            tempState.isAcceptingState = true;
+                    for (const state *currState : temp) {
+                        if (currState->isAcceptingState) {
+                            tempState->type = currState->type;
+                            tempState->isAcceptingState = true;
                             break;
                         }
                     }
                     DFA_states.push_back(tempState);
+                    tempState = new state();
+                }else{
+                    tempState = DFA_states[index];
                 }
-
-                DFA_states[Q_index].DFATransitions.insert({k, tempState});
+                DFA_states[Q_index]->DFATransitions.insert({k, tempState});
             }
         }
         ++Q_index;
     }
     return DFA_states;
 }
-int getIndexOf(const vector<state>& states, const state& arg) {
+int getIndexOf(const vector<state*>& states, const state* arg) {
         for (int i = 0; i < states.size(); ++i) {
             if (states[i] == arg) {
                 return i;
@@ -395,11 +394,11 @@ tuple<int, int, string> scanner(const string& input) {
     // non-minimal DFA represented by an array of states DFA_states TODO minimize
     static auto scannerTable = ScannerGenerator();
     static int streamPos = 0;
-    static state error = state();
-    auto Stack = stack<pair<state, int>>();
+    static state* error = new state();
+    auto Stack = stack<pair<state*, int>>();
     static vector<vector<bool>> Failed = vector<vector<bool>>(input.length(), vector<bool>(scannerTable.size(), false));
-    static state bad = state();
-    bad.id = -1;
+    static state* bad = new state();
+    bad->id = -1;
 
     string lexeme;
     auto currentState = scannerTable[0];
@@ -416,19 +415,19 @@ tuple<int, int, string> scanner(const string& input) {
         }
         c = input[streamPos]; // get character from the inputstream at index streamPos
         lexeme += c; // concatenate the character to lexeme
-        if (currentState.isAcceptingState) {
-            Stack = stack<pair<state, int>>();
+        if (currentState->isAcceptingState) {
+            Stack = stack<pair<state*, int>>();
             Stack.push({bad, -1});
         }
         Stack.push({currentState, streamPos});
         try {
-            currentState = currentState.DFATransitions.at(c);
+            currentState = currentState->DFATransitions.at(c);
         }catch (exception &e) {
             currentState = error;
         }
         ++streamPos;
     }
-    while (!currentState.isAcceptingState && currentState != bad) {
+    while (!currentState->isAcceptingState && currentState != bad) {
         if (currentState != error) {
             Failed[getIndexOf(scannerTable, currentState)][streamPos] = true;
         }
@@ -439,8 +438,10 @@ tuple<int, int, string> scanner(const string& input) {
             truncate(lexeme);
         }
     }
-    if (currentState.isAcceptingState) {
-        return {streamPos, currentState.type, lexeme};
+    delete bad;
+    delete error;
+    if (currentState->isAcceptingState) {
+        return {streamPos, currentState->type, lexeme};
     }else{
         return {streamPos, INVALID, lexeme};
     }
