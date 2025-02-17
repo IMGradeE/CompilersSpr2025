@@ -7,6 +7,8 @@
 #include <list>
 #include <algorithm>
 #include <fstream>
+#include <set>
+
 using namespace std;
 enum spec{ // OR, CONCAT, and STAR integer values can be compared to establish precedence between op symbols
     RPAREN = -6,
@@ -98,6 +100,7 @@ class state{
 
             isAcceptingState = false;
             type = INVALID;
+            states.push_back(this);
         }
         bool  isAcceptingState;
         bool operator==(const state &rhs) const{
@@ -107,11 +110,14 @@ class state{
             return !(*this == rhs);
         }
         static int statID;
+        static vector<state*> states;
         int type;
         map<char, vector<state*>> transitions =  map<char, vector<state*>>();
         map<char, state*> DFATransitions =  map<char, state*>();
 };
 int state::statID = 0;
+vector<state*> state::states=vector<state*>();
+
 pair<state*, state*> getNewNFA(){
     auto start = new state();
     auto end = new state();
@@ -169,13 +175,12 @@ pair <state*, state*> closeNFA(pair<state*, state*> NFA) {
 pair<state*,state*> toNFA(queue<char> input){
     state* start;
 
-
     auto s = stack<pair<state*, state*>>();
     char c;
     while(!input.empty()){
         c = input.front();
         input.pop();
-        if(isspace(c)){
+        if(c == ' '){
             continue;
         }
         if (c >= 0){ // symbol
@@ -206,46 +211,91 @@ pair<state*,state*> toNFA(queue<char> input){
     //return the start and end state of the completed nfa for this pattern
     return {s.top().first, s.top().second};
 }
-list<state*> followEpsilon(const state *initialState) {
-    try {
-        auto tvec = initialState->transitions.at(LAMBDA);
-        list<state*> epsilon;
-        for (state* &s : tvec) {
-            epsilon.push_back(s);
+set<state*> followEpsilonHelper(set<state*> parentTF){
+    if(parentTF.empty()){
+        return parentTF;
+    }else{
+        for (auto t : parentTF) {
+            set<state*> temp;
+            try {
+                for (auto item : t->transitions.at(LAMBDA)) {
+                    temp.insert(item);
+                }
+            }catch (exception e){}
+            parentTF.merge(followEpsilonHelper(temp));
         }
-        return epsilon;
-    }catch (exception &e) {
-        return {};
+        return parentTF;
     }
 }
-list<state*> Delta(const state* nState, char c) {
+list<state*> followEpsilon(const list<state*>& stateList) {
+    list<state*> epsilon = list<state*>(stateList);
+        for (auto curr: stateList) {
+            try {
+                auto tvec = curr->transitions.at(LAMBDA);
+                set<state*> temp;
+                for (auto t : tvec) {
+                    temp.insert(t);
+                }
+                temp = followEpsilonHelper(temp);
+                for (state* s : temp) {
+                    auto end = epsilon.end();
+                    if(find(epsilon.begin(), epsilon.end(), s) == end){
+                        epsilon.push_back(s);
+                    }
+                }
+            }catch (exception &e) {
+            }
+        }
+    return epsilon;
+}
+list<state*> followEpsilon(const vector<state*>& stateList) {
+    list<state*> epsilon ;
+    for (auto x: stateList) {
+        epsilon.push_back(x);
+    }
+    for (auto curr: stateList) {
+        try {
+            auto tvec = curr->transitions.at(LAMBDA);
+            set<state*> temp;
+            for (auto t : tvec) {
+                temp.insert(t);
+            }
+            temp = followEpsilonHelper(temp);
+            for (state* s : temp) {
+                auto end = epsilon.end();
+                if(find(epsilon.begin(), epsilon.end(), s) == end){
+                    epsilon.push_back(s);
+                }
+            }
+        }catch (exception &e) {
+        }
+    }
+    return epsilon;
+}
+list<state*> Delta(const list<state*>& nState, char c) {
     list<state*> ret;
-    try {
-        auto vec = nState->transitions.at(c);
-        // follow epsilon from each element accessible via this character
-        for (state* &s : vec) {
-           ret.push_back(s);
+    for (auto curr : nState) {
+        try {
+            auto vec = curr->transitions.at(c);
+            for (state* s : vec) {
+                auto end = ret.end();
+                if(find(ret.begin(), ret.end(), s) == end)
+                ret.push_back(s);
+            }
+        }catch (exception &e) {
         }
-        for (int i = 0; i < vec.size(); i++) {
-            auto it = ret.begin();
-            auto t = followEpsilon(*it);
-            ret.insert(ret.end(), t.begin(), t.end());
-            ++it;
-        }
-    }catch (exception &e) {
-
     }
     return ret;
 }
 bool compareQ(list<state*> lhs, list<state*> rhs) {
     if (lhs.size() != rhs.size()) return false;
     bool ret = true;
-    for (auto i = lhs.begin(), k = rhs.begin(); i != lhs.end(); next(i,1), next(k,1)) {
+    for (auto i = lhs.begin(), k = rhs.begin(); i != lhs.end(); i = next(i,1), k = next(k,1)) {
         ret &= (*i == *k);
     }
     return ret;
 }
-int Qcontains(const list<list<state*>>& Q, const list<state*>& Qitem) {
+int Qcontains(const set<list<state*>>& Q, const list<state*>& Qitem) {
     int count = 0;
     for (auto &q: Q) {
         if (compareQ(q, Qitem)){ return count;}
@@ -259,10 +309,11 @@ vector<state*> ScannerGenerator() {
     // TODO seek to endl for single line comments or to closing */ for multiline when encountered.
     auto NFAs = vector<pair<state*,state*>>();
     // Todo preprocessor for concatenation symbol insertion
-    string s[1] = {"a.(b+c)*"};
-
-    /*string s[16] = {
-                    "\\\\.n + \\\\.r + \\\\.v + \\\\.f", // ENDL,
+    string s[1] = {
+                   "a.(b+c)*+aa"};
+    /*string s[17] = {
+                        "\n + \r + \v + \f",
+                    R"(\.n + \.r + \.v + \.f)", // ENDL,
                     "r.e.t.u.r.n + p.r.o.c.e.d.u.r.e + i.s.h + n.u.m", // KEYWORD,
                     "\\+ + / + ^ + \\* + - + =", // OPERATOR,
                     "\"", // DQUOTE,
@@ -278,12 +329,10 @@ vector<state*> ScannerGenerator() {
                     "[", // OPENBRACKET, // [
                     "]", // CLOSEBRACKET // ]
                     ",", //COMMA
-    };
-    */
+    };*/
 
 
-
-    static int i = 0; // slightly easier than changing this to an indexed loop
+    static int i = 0, k = 0; // slightly easier than changing this to an indexed loop
     for(string lstr : s){
         char c;
         string string1;
@@ -323,57 +372,53 @@ vector<state*> ScannerGenerator() {
         auto NFA = toNFA(postfixPattern);
         NFA.second->type = i;
         NFA.second->isAcceptingState = true;
-        ++i;
+        if(k > 2){ ++i; }
+        ++k;
         NFAs.push_back(NFA);
     }
     auto startStates = vector<state*>();
     for (int j = 0; j < NFAs.size(); ++j) {
         startStates.push_back(NFAs[j].first);
     }
-    auto newStartState = new state();
 
-    newStartState->transitions.insert({LAMBDA, startStates});
     // convert to dfa, preserve end states
-    auto Q = list<list<state*>>();
+    auto Q = set<list<state*>>();
     auto workList = queue<list<state*>>();
-    auto q_0 = list<state*>();
+    auto q_0 = followEpsilon(startStates);
     vector<state*> DFA_states;
 
-    q_0 = followEpsilon(newStartState);
-    Q.push_back(q_0);
+    Q.insert(q_0);
     workList.push(q_0);
     int Q_index = 0;
     auto DFAStartState = new state();
 
     DFA_states.push_back(DFAStartState);
 
-    auto tempState = new state();
+    state* tempState;
     while(!workList.empty()) {
-        auto q = workList.front();
+        auto q= workList.front();
         workList.pop();
-        for (int k = 33; k < 127; ++k) { // every character in our alphabet
-            for (state* curr : q) {
-                auto temp = Delta(curr,((char) k));
-                if (temp.empty())
-                    continue; // error state
-                int index = Qcontains(Q, temp);
-                if (index == -1) { // this is a new DFA state
-                    Q.push_back(temp);
-                    workList.push(temp);
-                    for (const state *currState : temp) {
-                        if (currState->isAcceptingState) {
-                            tempState->type = currState->type;
-                            tempState->isAcceptingState = true;
-                            break;
-                        }
+        for (int k = 0; k < 127; ++k) { // every character in our alphabet
+            auto temp = followEpsilon(Delta(q,  k));
+            if (temp.empty())
+                continue; // error state
+            int index = Qcontains(Q, temp);
+            if (index == -1) { // this is a new DFA state
+                tempState = new state();
+                Q.insert(temp);
+                workList.push(temp);
+                for (const state *currState: temp) {
+                    if (currState->isAcceptingState) {
+                        tempState->type = currState->type;
+                        tempState->isAcceptingState = true;
+                        break;
                     }
-                    DFA_states.push_back(tempState);
-                    tempState = new state();
-                }else{
-                    tempState = DFA_states[index];
                 }
-                DFA_states[Q_index]->DFATransitions.insert({k, tempState});
+                DFA_states.push_back(tempState);
+            } else {
+                tempState = DFA_states[index];
             }
+            DFA_states[Q_index]->DFATransitions.insert({k, tempState});
         }
         ++Q_index;
     }
@@ -393,11 +438,18 @@ void truncate(string& lexeme) {
 tuple<int, int, string> scanner(const string& input) {
     // non-minimal DFA represented by an array of states DFA_states TODO minimize
     static auto scannerTable = ScannerGenerator();
-    static int streamPos = 0;
-    static state* error = new state();
-    auto Stack = stack<pair<state*, int>>();
-    static vector<vector<bool>> Failed = vector<vector<bool>>(input.length(), vector<bool>(scannerTable.size(), false));
     static state* bad = new state();
+    static state* error = new state();
+    static int count = 0;
+    if (count == 0){
+        scannerTable.push_back(bad);
+        scannerTable.push_back(error);
+        ++count;
+    }
+
+    int streamPos = 0;
+    auto Stack = stack<pair<state*, int>>();
+    vector<vector<bool>> Failed = vector<vector<bool>>(input.length(), vector<bool>(scannerTable.size(), false));
     bad->id = -1;
 
     string lexeme;
@@ -405,7 +457,7 @@ tuple<int, int, string> scanner(const string& input) {
     char c;
     Stack.push({bad, -1});
 
-    while (currentState != bad) {
+    while (currentState != error && currentState != bad) {
         if (Failed[getIndexOf(scannerTable, currentState)][streamPos]) {
             currentState = Stack.top().first;
             streamPos = Stack.top().second;
@@ -438,12 +490,11 @@ tuple<int, int, string> scanner(const string& input) {
             truncate(lexeme);
         }
     }
-    delete bad;
-    delete error;
+
     if (currentState->isAcceptingState) {
         return {streamPos, currentState->type, lexeme};
     }else{
-        return {streamPos, INVALID, lexeme};
+        return {lexeme.length(), INVALID, lexeme};
     }
 }
 int main() {
@@ -467,21 +518,30 @@ int main() {
     "COMMA",
     "INVALID"};
 
-    f.open("parser_text_hw2.txt");
+    /*f.open("parser_text_hw2.txt");*/
+    f.open("a_b_or_c_test.txt");
     if(!f.is_open()) {
         cout<< "The file referenced in the CLI arguments did not exist in the current directory. Resolve this issue and try again.";
         return -1;
     }
-    int size = 3400;
+    /*int size = 3400;*/
+    int size = 35;
     string input = string(size, '\0');
     f.seekg(ios::beg);
     f.read(&input[0], size);
     f.close();
 
-    while (size >= 0) {
+    while (size > 0){
+        if(isspace(input[0])) {
+            input = input.substr(1, input.length());
+            --size;
+            continue;
+        }
         auto token = scanner(input);
         cout << '<'<< tokenIdstrings[get<1>(token)] << ", " << get<2>(token) << '>' << '\n';
-        size -= get<0>(token);
+        if(get<0>(token) <= 0) get<0>(token) = 1;
+            input = input.substr(get<0>(token), input.length());
+            size -= get<0>(token);
     }
     return 0;
 }
