@@ -18,6 +18,8 @@ enum spec{ // OR, CONCAT, and STAR integer values can be compared to establish p
     STAR,
     LAMBDA
 };
+// This is all for a scanner that isn't only for arithmetic.
+/*
 enum tokenTypes{
     OPERATOR = 0,
     DQUOTE,
@@ -57,8 +59,8 @@ enum tokenTypes{
                   "\\.+!+>+<+?+;+:+&+|+#+@+`+~+%+$", // punctuation
                   " . *", // spaces
                   "\r.\n+\n.\r+\n+\r+\v+\f",// ENDL
-                  R"(\.n+\.r+\.v+\.f)", // ENDL_STR,
-                  "(a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w+x+y+z+A+B+C+D+E+F+G+H+I+J+K+L+M+N+O+P+Q+R+S+T+U+V+W+X+Y+Z).((a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w+x+y+z+A+B+C+D+E+F+G+H+I+J+K+L+M+N+O+P+Q+R+S+T+U+V+W+X+Y+Z)*)", // IDENTIFIER
+                  R"(\\.n+\\.r+\\.v+\\.f)", // ENDL_STR,
+                  "(a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w+x+y+z+A+B+C+D+E+F+G+H+I+J+K+L+M+N+O+P+Q+R+S+T+U+V+W+X+Y+Z).(_*+(0+1+2+3+4+5+6+7+8+9).((0+1+2+3+4+5+6+7+8+9)*)+(a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w+x+y+z+A+B+C+D+E+F+G+H+I+J+K+L+M+N+O+P+Q+R+S+T+U+V+W+X+Y+Z)*)", // IDENTIFIER
                   "(0+1+2+3+4+5+6+7+8+9).((0+1+2+3+4+5+6+7+8+9)*)", // NUMBER,
                   "r.e.t.u.r.n. +p.r.o.c.e.d.u.r.e. +i.s.h. +n.u.m. ", // KEYWORD,
   };
@@ -84,6 +86,38 @@ string tokenIdstrings[] = {
                             "NUMBER",
                             "KEYWORD",
                             "INVALID"
+};*/
+
+enum tokenTypes{
+    OPERATOR,
+    INT,
+    FLOAT,
+    NAME,
+    OPENPAREN,
+    CLOSEPAREN,
+    ENDL,
+    WHITESPACE,
+    INVALID = -1
+};
+string patternStrings[] = {
+        "-+/+\\*+^+\\+",
+        "\\(",
+        "\\)",
+        "(0+1+2+3+4+5+6+7+8+9).(0+1+2+3+4+5+6+7+8+9)*", // NUMBER,
+        "(0+1+2+3+4+5+6+7+8+9)*.\\..(0+1+2+3+4+5+6+7+8+9)*",
+        "(a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w+x+y+z+A+B+C+D+E+F+G+H+I+J+K+L+M+N+O+P+Q+R+S+T+U+V+W+X+Y+Z).((_)+(0+1+2+3+4+5+6+7+8+9)+(a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w+x+y+z+A+B+C+D+E+F+G+H+I+J+K+L+M+N+O+P+Q+R+S+T+U+V+W+X+Y+Z))*", // NAME
+        "\r.\n+\n.\r+\n+\r+\v+\f",// ENDL
+        " *"
+};
+string tokenIdstrings[] = {
+        "OPERATOR",
+        "OPENPAREN",
+        "CLOSEPAREN",
+        "INT",
+        "FLOAT",
+        "NAME",
+        "ENDL",
+        "WHITESPACE",
 };
 
 void accumulate(string& accumulator, queue<char>& output){
@@ -92,6 +126,7 @@ void accumulate(string& accumulator, queue<char>& output){
     }
     accumulator.clear();
 }
+
 queue<char> shuntingYard(string workingString){
     queue output = queue<char>();
     stack operators = stack<char>();
@@ -140,6 +175,7 @@ queue<char> shuntingYard(string workingString){
     }
     return output;
 }
+
 class state{
     public:
         int id;
@@ -162,26 +198,62 @@ class state{
         static vector<state*> states;
         int type;
         map<char, vector<state*>> transitions =  map<char, vector<state*>>();
-        map<char, state*> DFATransitions =  map<char, state*>();
+
+        ~state(){
+            for (int i = 0; i < states.size(); ++i) {
+                if(states[i]!= this){
+                    delete states[i];
+                }
+            }
+        }
 };
 int state::statID = 0;
 vector<state*> state::states=vector<state*>();
 
+class DFAState{
+    static int statID;
+public:
+    DFAState() {
+        id = statID;
+        ++statID;
+        visited = false;
+        isAcceptingState = false;
+        type = INVALID;
+        states.push_back(this);
+    }
+    bool  isAcceptingState, visited;
+    bool operator==(const state &rhs) const{
+        return (this->id == rhs.id);
+    }
+    bool operator!=(const state &rhs) const{
+        return !(*this == rhs);
+    }
+    static vector<DFAState*> states;
+    int type;
+    map<char, DFAState*> transitions =  map<char, DFAState*>();
+
+    ~DFAState(){
+    }
+
+    int id = 0;
+};
+int DFAState::statID = 0;
+vector<DFAState*> DFAState::states=vector<DFAState*>();
+
 pair<state*, state*> getNFA(char c){
     auto start = new state();
-    auto middle = new state();
     auto end = new state();
     end->isAcceptingState = true;
-    auto v2 = vector<state*>(1, middle);
-    start->transitions.insert({c, v2});
     auto v = vector<state*>();
     v.push_back(end);
-    middle->transitions.insert({LAMBDA, v});
+    start->transitions.insert({c, v});
     return {start, end};
 }
+
 void setInnerStates(pair<state*, state*> &NFA){
     NFA.second->isAcceptingState = false;
 }
+
 pair <state*, state*> unionNFAs(pair<state*, state*> NFA1, pair<state*, state*> NFA2){
     // make a new NFA with lambda transitions to the argument NFAs (lamba = -1)
     auto start = new state();
@@ -199,16 +271,18 @@ pair <state*, state*> unionNFAs(pair<state*, state*> NFA1, pair<state*, state*> 
     setInnerStates(NFA2);
     return {start, end};
 }
+
 pair <state*, state*> concatNFAs(pair<state*, state*>& NFA1, const pair<state*, state*> &NFA2){
     // make NFA1's isAcceptingState state the same as NFA2's isInitialState state.
     NFA1.second->isAcceptingState = false; // isAcceptingState state no longer marked as isAcceptingState state
 
-    NFA1.second->transitions = NFA2.first->transitions; //second never has out transitions, first never has in transitions.
     // naive implementation is just to lambda transition from the old isAcceptingState of NFA1 to the old isInitialState of NFA2 so that's what I'm doing
-    NFA2.first->transitions.clear();
+
+    NFA1.second->transitions.insert({LAMBDA, vector<state*>(1, NFA2.first)});
 
     return {NFA1.first, NFA2.second};
 }
+
 pair <state*, state*> closeNFA(pair<state*, state*> NFA) {
     auto start = new state();
     auto end = new state();
@@ -224,6 +298,7 @@ pair <state*, state*> closeNFA(pair<state*, state*> NFA) {
     start->transitions.at(LAMBDA).push_back(NFA.first);
     return {start, end};
 }
+
 pair<state*,state*> toNFA(queue<char> input){
     auto s = stack<pair<state*, state*>>();
     char c;
@@ -259,6 +334,7 @@ pair<state*,state*> toNFA(queue<char> input){
     //return the start and end state of the completed nfa for this pattern
     return {s.top().first, s.top().second};
 }
+
 set<state*> followEpsilonHelper(set<state*> parentTF){
     ++epsilonHelperInvocations;
     if(parentTF.empty()){
@@ -273,12 +349,13 @@ set<state*> followEpsilonHelper(set<state*> parentTF){
                         parentTF.insert(item);
                     }
                 }
-            }catch (exception e){}
+            }catch (exception& e){}
             parentTF.merge(followEpsilonHelper(parentTF));
         }
         return parentTF;
     }
 }
+
 list<state*> followEpsilon(const list<state*>& stateList) {
     ++epsilonInvocations;
     list<state*> epsilon = list<state*>(stateList);
@@ -302,6 +379,7 @@ list<state*> followEpsilon(const list<state*>& stateList) {
     }
     return epsilon;
 }
+
 list<state*> Delta(const list<state*>& nState, char c) {
     ++deltaInvocations;
     list<state*> ret;
@@ -318,6 +396,7 @@ list<state*> Delta(const list<state*>& nState, char c) {
     }
     return ret;
 }
+
 bool compareQ(list<state*> lhs, list<state*> rhs) {
     if (lhs.size() != rhs.size()) return false;
     bool ret = true;
@@ -326,7 +405,8 @@ bool compareQ(list<state*> lhs, list<state*> rhs) {
     }
     return ret;
 }
-int Qcontains(const set<list<state*>>& Q, const list<state*>& Qitem) {
+
+int Qcontains(const vector<list<state*>>& Q, const list<state*>& Qitem) {
     int count = 0;
     for (auto &q: Q) {
         if (compareQ(q, Qitem)){ return count;}
@@ -334,6 +414,7 @@ int Qcontains(const set<list<state*>>& Q, const list<state*>& Qitem) {
     }
     return -1;
 }
+
 /*void DFAToFile(vector<state*> DFA){
     fstream f;
     f.open("DFA.txt", ios::out);
@@ -349,7 +430,7 @@ int Qcontains(const set<list<state*>>& Q, const list<state*>& Qitem) {
 
     f.close();
 }*/
-vector<state*> ScannerGenerator() {
+void ScannerGenerator() {
     // a(a+b)*b -> aab+*.b. => "a.(a+b)*.b"
     // Does not properly parse statements like ab* or (a+b)a+b where an implicit subexpr is operated on unless concatenation is specified explicitly.
     // TODO seek to endl for single line comments or to closing */ for multiline when encountered.
@@ -400,65 +481,64 @@ vector<state*> ScannerGenerator() {
         ++i;
         NFAs.push_back(NFA);
     }
-    nfaStates = NFAs[0].first->states.size();
+    nfaStates = state::states.size();
+    auto startState = new state();
     auto startStates = vector<state*>();
+
     for (int j = 0; j < NFAs.size(); ++j) {
         startStates.push_back(NFAs[j].first);
     }
-    auto startState = new state();
     startState->transitions.insert({LAMBDA, startStates});
-    auto lstartStates = list<state*>(1, startState);
+
     // convert to dfa, preserve end states
-    auto Q = set<list<state*>>();
+    auto Q = vector<list<state*>>();
     auto workList = queue<list<state*>>();
-    auto q_0 = followEpsilon(lstartStates);
+    auto q_0 = followEpsilon({startState});
 
-    vector<state*> DFA_states;
-
-    Q.insert(q_0);
+    Q.push_back(q_0);
     workList.push(q_0);
-    int Q_index = 0;
-    auto DFAstart = new state();
-    for (state* currState: q_0) {
-        if (currState->isAcceptingState) {
-            DFAstart->type = currState->type;
-            DFAstart->isAcceptingState = true;
-        }
-        currState->visited = false;
-    }
-    DFA_states.push_back(DFAstart);
-    state* tempState;
+
+
+    DFAState* tempState;
+    auto DFAQ =queue<DFAState*>();
+    DFAState* qState;
+
     while(!workList.empty()) {
+
         auto q= workList.front();
+        if(DFAQ.empty()) qState = new DFAState();
+        else { qState = DFAQ.front(); DFAQ.pop(); }
         workList.pop();
+
         for (int j = 0; j < 127; ++j) { // every character in our alphabet
             auto temp = followEpsilon(Delta(q, j));
-            if (temp.empty())
-                continue; // error state
-            int index = Qcontains(Q, temp);
-            if (index == -1) { // this is a new DFA state
-                tempState = new state();
-                Q.insert(temp);
-                workList.push(temp);
-                for (state* currState: temp) {
-                    if (currState->isAcceptingState && currState->type > tempState->type) {
-                        tempState->type = currState->type;
-                        tempState->isAcceptingState = true;
+            if (!temp.empty()) {
+                int index = Qcontains(Q, temp);
+                if (index == -1) { // this is a new DFA state
+                    tempState = new DFAState();
+                    Q.push_back(temp);
+                    workList.push(temp);
+                    for (state *currState: temp) {
+                        if (currState->isAcceptingState) {
+                            if (currState->type > tempState->type) tempState->type = currState->type;
+                            tempState->isAcceptingState = true;
+                        }
+                        currState->visited = false;
                     }
-                    currState->visited = false;
+                    qState->transitions.insert({j, tempState});
+                    // insert tempstate into a DFAState queue and make qState = queue.front() if the queue is not empty.
+                    DFAQ.push(tempState);
+                }else{
+                    qState->transitions.insert({j, DFAState::states[index]});
                 }
-                DFA_states.push_back(tempState); //TODO Transitions aren't inserted correctly
-            } else {
-                tempState = DFA_states[index];
             }
-            DFA_states[Q_index]->DFATransitions.insert({j, tempState});
         }
-        ++Q_index;
+
     }
-    /*DFAToFile(DFA_states);*/
-    return DFA_states;
+    return;
 }
-int getIndexOf(const vector<state*>& states, const state* arg) {
+
+int getIndexOf(const vector<DFAState*>& states, const DFAState* arg) {
         for (int i = 0; i < states.size(); ++i) {
             if (states[i] == arg) {
                 return i;
@@ -469,22 +549,22 @@ int getIndexOf(const vector<state*>& states, const state* arg) {
 void truncate(string& lexeme) {
     lexeme = lexeme.substr(0, lexeme.length() - 1); // TODO verify
 }
-tuple<int, int, string> scanner(const string& input, vector<state*>& scannerTable) {
+tuple<int, int, string> scanner(const string& input, vector<DFAState*>& scannerTable) {
     // non-minimal DFA represented by an array of states DFA_states TODO minimize
 
-    static state* bad = new state();
-    static state* error = new state();
+    static auto bad = new DFAState();
+    static auto error = new DFAState();
     static int count = 0;
     if (count == 0){
         scannerTable.push_back(bad);
         scannerTable.push_back(error);
+        bad->id = -1;
         ++count;
     }
 
     int streamPos = 0;
-    auto Stack = stack<pair<state*, int>>();
+    auto Stack = stack<pair<DFAState*, int>>();
     vector<vector<bool>> Failed = vector<vector<bool>>(input.length()+1, vector<bool>(scannerTable.size(), false));
-    bad->id = -1;
 
     string lexeme;
     auto currentState = scannerTable[0];
@@ -502,12 +582,12 @@ tuple<int, int, string> scanner(const string& input, vector<state*>& scannerTabl
         c = input[streamPos]; // get character from the inputstream at index streamPos
         lexeme += c; // concatenate the character to lexeme
         if (currentState->isAcceptingState) {
-            Stack = stack<pair<state*, int>>();
+            Stack = stack<pair<DFAState*, int>>();
             Stack.push({bad, -1});
         }
         Stack.push({currentState, streamPos});
         try {
-            currentState = currentState->DFATransitions.at(c);
+            currentState = currentState->transitions.at(c);
         }catch (exception &e) {
             currentState = error;
         }
@@ -543,6 +623,7 @@ tuple<int, int, string> scanner(const string& input, vector<state*>& scannerTabl
         return {lexeme.length(), INVALID, lexeme};
     }
 }
+
 int main() {
     fstream f;
 
@@ -561,7 +642,8 @@ int main() {
     f.close();
 
 
-    auto scanner_ = ScannerGenerator();
+    ScannerGenerator();
+    auto scanner_ = DFAState::states;
     while (size > 0){
         if(input.length() > 1){
             if(input[0] == '/' && input[1] == '/' ){
@@ -582,7 +664,7 @@ int main() {
 
         }
         auto token = scanner(input, scanner_);
-        if(((get<1>(token) == ENDL))) {
+        if(get<1>(token) == ENDL) {
             cout << '\n';
         }
         else{
@@ -606,11 +688,6 @@ int main() {
     f.read(&input[0], size);
     f.close();
     while (size > 0){
-        if(input[0] == ' ') {
-            input = input.substr(1, input.length());
-            --size;
-            continue;
-        }
         if(input.length() > 1){
             if(input[0] == '/' && input[1] == '/' ){
                 while(!iscntrl(input[0])){
@@ -627,7 +704,6 @@ int main() {
                 input = input.substr(1, input.length());
                 --size;
             }
-
         }
         auto token = scanner(input, scanner_);
         char end = ((get<1>(token) == ENDL))? '\n' : ' ';
@@ -649,3 +725,4 @@ int main() {
     delete scanner_[0];
     return 0;
 }
+

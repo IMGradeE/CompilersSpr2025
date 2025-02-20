@@ -9,22 +9,6 @@ z-y
 12 / 6
 12/6
 5 + 4 * 3
-12 + 34 * 45
-(4 / 5)
-2 * 2 + 5 * 5
-5 / 0
-42
-(42)
-((42))
-( ( 42 ) )
-var
-var + another_var
-var1 + var2
-foo * bar
-a+b*c
-x-y
-1234*5678
-one + two * three / four
 100000/a_long_variable_name
 ((12-8)-3)
 (5*(8/4))
