@@ -55,33 +55,11 @@ int main() {
 #include <string>
 #include <iostream>
 #include <vector>
+#include <map>
+#include <set>
+#include "GlobalEnums.h"
 
 using namespace std;
-
-enum Symbol{
-    ANONYMOUS_START =  INT16_MIN,
-    // anonymous non-terminals reside here
-    GOAL = -255, // non-terminals
-    EXPR,
-    EXPR_PRIME,
-    TERM,
-    TERM_PRIME,
-    FACTOR,
-    goal, // todo
-    // terminals
-    EPSILON = -10,
-    NUM,
-    NAME,
-    EOF_,
-    PLUS,
-    MINUS,
-    MULTIPLY,
-    DIVIDE,
-    LEFT_PAREN,
-    RIGHT_PAREN,
-    a,
-    b
-};
 
 typedef struct Production{
     Symbol lhs;
@@ -91,7 +69,6 @@ typedef struct Production{
 class Parser{
 public:
     int MIN_NONTERMINAL = EPSILON;
-    vector<Production> grammar = vector<Production>(); // INITIALIZE OUT OF LINE
     int last_generated_non_terminal = ANONYMOUS_START;
     /*virtual void ParserGenerator();
     virtual void ConstructTable();
@@ -167,8 +144,8 @@ public:
 
     string grammarToString(){
         string ret;
-        int count =0;
         for (auto& production: grammar) {
+            int count =0;
             ret += '\n';
             ret += to_string(production.lhs);
             ret += " ->";
@@ -184,46 +161,238 @@ public:
         }
         return ret;
     }
+
+    vector<Production> grammar = vector<Production>();
 };
 
-class ArithmeticParser:Parser{
+class ArithmeticParser:public Parser{
 private:
+    ArithmeticParser(): Parser(){}
     static ArithmeticParser* singleton;
-    ArithmeticParser(){
-
-    }
 public:
+    set<Symbol> First(const Symbol& product){
+        if(product < NUM){ // product is nonterminal
+            auto ret = set<Symbol>();
+            for(auto& p : grammar){
+                if(p.lhs == product){
+                    for(auto& can_yield : p.rhs){
+                        if(can_yield[0] >= NUM){
+                            ret.insert(can_yield[0]);
+                        }else{
+                            ret.merge(First(can_yield[0]));
+                        }
+                    }
+                    break;
+                }
+            }
+            return ret;
+        }else{
+            return {product};
+        }
+    }
+
+    map<Symbol, set<Symbol>> getFirstSet(){
+        const Symbol arr[] = {NUM,NAME_,EOF_,EPSILON,PLUS,MINUS,MULTIPLY,DIVIDE,LEFT_PAREN,RIGHT_PAREN,};
+        auto first = map<Symbol, set<Symbol>>();
+        for (const auto& symbol:arr) {// num is the lowest valued non-terminal
+            first.insert({symbol, {symbol}}); // first(a)->a
+        }
+
+        while(true) {
+            auto oldFirst = first;
+            for (auto &production: grammar) { // each lhs->rhs
+                if (first.find(production.lhs) == first.end()) {
+                    first.insert({production.lhs, {}}); // first(A)-> <EmptySet>
+                }
+                // B_1 is either a terminal who's first set is empty, so we remove epsilon and insert the empty set, or
+                //  we insert the first set for this non-terminal
+                for (auto& yields: production.rhs){
+                    auto rhs = set<Symbol>();
+                    auto temp = First(yields[0]);
+                    temp.erase(EPSILON);
+                    rhs.merge(temp);
+                    bool trailing = true;
+                    for (int i = 0; i < (yields.size() - 1); ++i) {
+                        if(i<(yields.size() - 2)){trailing = false; break;}// each production option in rhs a_1A_1B_1 | b_1A_2 | ...
+                        temp = First(yields[i]);
+                        if (temp.find(EPSILON) != temp.end()) { // contains on c++20
+                            temp = First(yields[i + 1]);
+                            temp.erase(EPSILON);
+                            rhs.merge(temp);
+                        } else {
+                            trailing = false;
+                            break;
+                        }
+                    }
+                    temp = First(yields[yields.size() - 1]);
+                    if (trailing && temp.find(EPSILON) != temp.end()) {
+                        rhs.merge(set{EPSILON});
+                    }
+                    first.at(production.lhs).merge(rhs);
+                }
+            }
+            if(oldFirst == first){
+                break;
+            }
+        }
+        return first;
+    }
+
+    map<Symbol, set<Symbol>> getFollowSet( const map<Symbol, set<Symbol>>& first){
+        auto follow = map<Symbol, set<Symbol>>();
+        for(const auto& lhs : first ){
+            if(lhs.first < NUM){
+                follow.insert({lhs.first, {}});
+            }else{
+                break;
+            }
+        }
+        follow.at(GOAL) = {EOF_};
+
+        while(true) {
+            auto oldFollow = follow;
+            for (auto &production: grammar) { // each lhs->rhs
+                // B_1 is either a terminal who's follow set is empty, so we remove epsilon and insert the empty set, or
+                //  we insert the follow set for this non-terminal
+                for (auto& yields: production.rhs){
+                    auto trailer = follow.at(production.lhs);
+                    for (int i = yields.size() - 1; i >= 0; --i) {
+                        auto B_i = yields[i];
+                        if(B_i< NUM){ // nonterminal
+                            auto temp = trailer;
+                            follow.at(B_i).merge(temp);
+                            auto t = First(B_i);
+                            if(t.find(EPSILON) != t.end()){
+                                t.erase(EPSILON);
+                                trailer.merge(t);
+                            }else{
+                                trailer = t;
+                            }
+                        }else{
+                            trailer = {B_i};
+                        }
+                    }
+                }
+            }
+            if(oldFollow == follow){
+                break;
+            }
+        }
+        return follow;
+    }
+
+    map<pair<Symbol, Symbol>, set<Symbol>> getStartSet( const map<Symbol, set<Symbol>>& first, const map<Symbol, set<Symbol>>& follow){
+        auto start = map<pair<Symbol, Symbol>, set<Symbol>>();
+        for (const auto& p: grammar) {
+            for (const auto& yields : p.rhs) {
+                auto b = yields[0];
+                auto atbeta = first.at(b);
+                if(atbeta.find(EPSILON) == atbeta.end()){
+                    start.insert({{p.lhs, b},{atbeta}});
+                }else{
+                    atbeta.erase(EPSILON);
+                    auto t = follow.at(p.lhs);
+                    atbeta.merge(t);
+                    start.insert({{p.lhs, b},{atbeta}});
+                }
+            }
+        }
+        return start;
+    }
+
+    vector<vector<int>> tableGenerator(const map<Symbol, set<Symbol>>& first, map<pair<Symbol, Symbol>, set<Symbol>>& start){
+        auto nonterminals = set<Symbol>();
+        auto terminals = set<Symbol>();
+        auto ret = vector<vector<int>>();
+        for(const auto& lhs : first ){
+            if(lhs.first < NUM){
+                nonterminals.insert({lhs.first});
+            }else{
+                break;
+            }
+        }
+        for(const auto& lhs : first ){
+            if(lhs.first >= NUM){
+                terminals.insert({lhs.first});
+            }
+        }
+        int k = 0;
+        for (auto& nt : nonterminals) {
+            ret.push_back(vector<int>(terminals.size(), ERROR));
+
+            for (int i = 0, p = 0; i < grammar.size(); ++i, ++p) {
+                if(grammar[i].lhs == nt){
+                    for (auto opts:grammar[i].rhs) {
+                        for (auto x = 0; x < start.at({nt, opts[0]}).size(); ++x) {
+                            ret[i][x] = p;
+                            ++p;
+                        }
+                        if(start.at({nt, opts[0]}).find(EOF_) != start.at({nt, opts[0]}).end()){
+                            ret[i][0] = p;
+                        }
+                        ++p;
+                    }
+                    break;
+                }
+            }
+
+        }
+        return ret;
+    }
 
     void ParserGenerator(){
 
     }
 
     static ArithmeticParser* getInstance(){
-        if(singleton == nullptr){
+        if(ArithmeticParser::singleton == nullptr){
             return new ArithmeticParser();
         }
-        return singleton;
+        return ArithmeticParser::singleton;
     }
 
 };
+ArithmeticParser* ArithmeticParser::singleton = nullptr;
+
 
 
 int main(){
-    auto Goal = Production();
-    Goal.lhs = goal;
-
-    auto A = Production();
-    A.lhs = EXPR;
-
-    auto B = Production();
-    B.lhs = EXPR_PRIME;
-
-    Goal.rhs = {{EXPR}};
-    A.rhs = {{EXPR_PRIME, a}, {a}};
-    B.rhs = {{EXPR, b}};
-    auto p = Parser();
-    p.grammar = {Goal, A, B};
-    cout << p.grammarToString();
-    p.removeIndirectLeftRecursion();
-    cout << p.grammarToString();
+    auto Goal = Production{GOAL, {{EXPR}}};
+    auto Expr = Production{EXPR, {{TERM, EXPR_PRIME}}};
+    auto ExprPrime = Production{
+        EXPR_PRIME,
+        {
+            {PLUS, TERM, EXPR_PRIME},
+            {MINUS, TERM, EXPR_PRIME},
+            {EPSILON}
+        }};
+    auto Term = Production {
+        TERM,
+        {
+            {FACTOR, TERM_PRIME}
+        }};
+    auto TermPrime = Production {
+        TERM_PRIME,
+        {
+                {MULTIPLY, FACTOR, TERM_PRIME},
+                {DIVIDE, FACTOR, TERM_PRIME},
+                {EPSILON}
+        }};
+    auto Factor = Production {
+        FACTOR,
+        {
+                {LEFT_PAREN, EXPR, RIGHT_PAREN},
+                {NUM},
+                {NAME_}
+        }};
+    auto p = ArithmeticParser::getInstance();
+    p->grammar = {Goal, Expr, ExprPrime, Term, TermPrime, Factor};
+    cout << p->grammarToString();
+    p->removeIndirectLeftRecursion();
+    cout << p->grammarToString();
+    auto FIRST = p->getFirstSet();
+    auto FOLLOW = p->getFollowSet(FIRST);
+    auto START = p->getStartSet(FIRST, FOLLOW);
+    auto TABLE = p->tableGenerator(FIRST, START);
+    delete p;
 }

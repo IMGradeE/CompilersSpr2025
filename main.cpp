@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <fstream>
 #include <set>
+#include "GlobalEnums.h"
 using namespace std;
 int epsilonInvocations = 0, deltaInvocations = 0, epsilonHelperInvocations = 0, nfaStates = 0;
 enum spec{ // OR, CONCAT, and STAR integer values can be compared to establish precedence between op symbols
@@ -88,17 +89,7 @@ string tokenIdstrings[] = {
                             "INVALID"
 };*/
 
-enum tokenTypes{
-    OPERATOR,
-    INT,
-    FLOAT,
-    NAME,
-    OPENPAREN,
-    CLOSEPAREN,
-    ENDL,
-    WHITESPACE,
-    INVALID = -1
-};
+
 string patternStrings[] = {
         "-+/+\\*+^+\\+",
         "\\(",
