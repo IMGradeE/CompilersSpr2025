@@ -58,6 +58,7 @@ int main() {
 #include <map>
 #include <set>
 #include "GlobalEnums.h"
+#include "main.cpp"
 
 using namespace std;
 
@@ -68,11 +69,8 @@ typedef struct Production{
 
 class Parser{
 public:
-    int MIN_NONTERMINAL = EPSILON;
+    int MIN_TERMINAL = NUM;
     int last_generated_non_terminal = ANONYMOUS_START;
-    /*virtual void ParserGenerator();
-    virtual void ConstructTable();
-    virtual void SkeletonParser();*/
 
     void leftRecursionToRightRecursion(){
         for (int i = 0; i < grammar.size(); ++i){
@@ -83,7 +81,7 @@ public:
     }
 
     void leftRecursionToRightRecursion(int i, int k){
-        if(MIN_NONTERMINAL > grammar[i].lhs && grammar[i].rhs[k][0] == grammar[i].lhs){
+        if(MIN_TERMINAL > grammar[i].lhs && grammar[i].rhs[k][0] == grammar[i].lhs){
             // rhs of any such production rhs[index>0] is inserted as the prefix in the production from the generated non-terminal to the generated non-terminal.
             // generated non-terminal also receives an epsilon production
             auto p = Production();
@@ -121,7 +119,7 @@ public:
             for (int j = 0; j < i; ++j) {
                 for (int k = 0; k < grammar[i].rhs.size(); ++k) {
                     // check if sequence starts with the nonterminal in the lhs at index j
-                    if(MIN_NONTERMINAL > grammar[j].lhs && grammar[i].rhs[k][0] == grammar[j].lhs){ // A_s is the first symbol in a production whose lhs is A_i
+                    if(MIN_TERMINAL > grammar[j].lhs && grammar[i].rhs[k][0] == grammar[j].lhs){ // A_s is the first symbol in a production whose lhs is A_i
                         // replace production A_i -> A_s{} by expanding A_s
                         grammar[i].rhs[k].erase(grammar[i].rhs[k].begin());
 
@@ -142,34 +140,32 @@ public:
         }
     };
 
-    string grammarToString(){
-        string ret;
-        for (auto& production: grammar) {
-            int count =0;
-            ret += '\n';
-            ret += to_string(production.lhs);
-            ret += " ->";
-            for(auto& yields : production.rhs){
-                if(count != 0){ ret += "\t  | ";}
-                else{++count;}
-                for (const auto& symbol: yields) {
-                    ret+= to_string(symbol);
-                    ret += ' ';
-                }
-                ret += '\n';
-            }
-        }
-        return ret;
-    }
-
     vector<Production> grammar = vector<Production>();
 };
 
 class ArithmeticParser:public Parser{
 private:
-    ArithmeticParser(): Parser(){}
+    explicit ArithmeticParser(vector<Production>& _grammar): Parser(){
+        grammar = _grammar;
+        for (auto g : grammar) {
+            for (auto v: g.rhs) {
+                productions.push_back(v);
+            }
+        }
+        getFirstSet();
+        getFollowSet();
+        getStartSet();
+        tableGenerator();
+    }
     static ArithmeticParser* singleton;
-public:
+    map<Symbol, set<Symbol>> first;
+    map<Symbol, set<Symbol>> follow;
+    map<pair<Symbol, Symbol>, set<Symbol>> start;
+    map<pair<Symbol, Symbol>, int> table;
+    vector<vector<Symbol>> productions = vector<vector<Symbol>>();
+    set<Symbol> terminals;
+    set<Symbol> nonterminals;
+
     set<Symbol> First(const Symbol& product){
         if(product < NUM){ // product is nonterminal
             auto ret = set<Symbol>();
@@ -191,9 +187,14 @@ public:
         }
     }
 
-    map<Symbol, set<Symbol>> getFirstSet(){
-        const Symbol arr[] = {NUM,NAME_,EOF_,EPSILON,PLUS,MINUS,MULTIPLY,DIVIDE,LEFT_PAREN,RIGHT_PAREN,};
-        auto first = map<Symbol, set<Symbol>>();
+    void getFirstSet(){
+        vector<Symbol> arr;
+        for (auto p :SymbolToString::SymbolMap) {
+            if (p.first >= MIN_TERMINAL){
+                arr.push_back(p.first);
+            }
+        }
+        first = map<Symbol, set<Symbol>>();
         for (const auto& symbol:arr) {// num is the lowest valued non-terminal
             first.insert({symbol, {symbol}}); // first(a)->a
         }
@@ -235,11 +236,10 @@ public:
                 break;
             }
         }
-        return first;
     }
 
-    map<Symbol, set<Symbol>> getFollowSet( const map<Symbol, set<Symbol>>& first){
-        auto follow = map<Symbol, set<Symbol>>();
+    void getFollowSet(){
+        follow = map<Symbol, set<Symbol>>();
         for(const auto& lhs : first ){
             if(lhs.first < NUM){
                 follow.insert({lhs.first, {}});
@@ -278,11 +278,11 @@ public:
                 break;
             }
         }
-        return follow;
+
     }
 
-    map<pair<Symbol, Symbol>, set<Symbol>> getStartSet( const map<Symbol, set<Symbol>>& first, const map<Symbol, set<Symbol>>& follow){
-        auto start = map<pair<Symbol, Symbol>, set<Symbol>>();
+    void getStartSet(){
+        start = map<pair<Symbol, Symbol>, set<Symbol>>();
         for (const auto& p: grammar) {
             for (const auto& yields : p.rhs) {
                 auto b = yields[0];
@@ -297,13 +297,12 @@ public:
                 }
             }
         }
-        return start;
     }
 
-    vector<vector<int>> tableGenerator(const map<Symbol, set<Symbol>>& first, map<pair<Symbol, Symbol>, set<Symbol>>& start){
-        auto nonterminals = set<Symbol>();
-        auto terminals = set<Symbol>();
-        auto ret = vector<vector<int>>();
+    void tableGenerator(){
+        nonterminals = set<Symbol>();
+        terminals = set<Symbol>();
+        table = map<pair<Symbol, Symbol>, int>();
         for(const auto& lhs : first ){
             if(lhs.first < NUM){
                 nonterminals.insert({lhs.first});
@@ -316,39 +315,167 @@ public:
                 terminals.insert({lhs.first});
             }
         }
-        int k = 0;
-        for (auto& nt : nonterminals) {
-            ret.push_back(vector<int>(terminals.size(), ERROR));
-
-            for (int i = 0, p = 0; i < grammar.size(); ++i, ++p) {
-                if(grammar[i].lhs == nt){
-                    for (auto opts:grammar[i].rhs) {
-                        for (auto x = 0; x < start.at({nt, opts[0]}).size(); ++x) {
-                            ret[i][x] = p;
-                            ++p;
-                        }
-                        if(start.at({nt, opts[0]}).find(EOF_) != start.at({nt, opts[0]}).end()){
-                            ret[i][0] = p;
-                        }
-                        ++p;
-                    }
-                    break;
-                }
+        int p = 0;
+        for (int i = 0; i < grammar.size(); ++i) {
+            auto A = grammar[i].lhs;
+            if(table.find({A, EOF_}) == table.end()) {
+                table.insert({{A, EOF_}, ERROR});
+            }
+            for (auto t: terminals) {
+                table.insert({{A, t}, ERROR});
             }
 
+            for (int j = 0; j < grammar[i].rhs.size(); ++j, ++p) {
+
+                auto B = grammar[i].rhs[j][0];
+                auto START_A_B = start.at({A,B});
+                for (auto w: START_A_B) {
+                    table.at({A, w}) = p;
+                }
+                if (START_A_B.find(EOF_) != START_A_B.end()){
+                    table.at({A, EOF_}) = p;
+                }
+            }
+        }
+    }
+
+public:
+    string grammarToString(){
+        string ret;
+        for (auto& production: grammar) {
+            ret += '\n';
+            ret += SymbolToString::getString(production.lhs);
+            ret += " -> first set {";
+            for (auto i : first.at(production.lhs)) {
+                ret+= SymbolToString::getString(i );
+                ret += ", ";
+            }
+            ret += "} -> follow set {";
+            for (auto i : follow.at(production.lhs)) {
+                ret+= SymbolToString::getString(i );
+                ret += ", ";
+            }
+            ret += "}\n";
+            for(auto& yields : production.rhs){
+                ret += "\t  | ";
+                for (const auto& symbol: yields) {
+                    ret+= SymbolToString::getString(symbol);
+                    ret += ' ';
+                }
+                ret += " -> start set {";
+                for (auto i : start.at({production.lhs, yields[0]})) {
+                    ret+= SymbolToString::getString(i );
+                    ret += ", ";
+                }
+                ret += "}";
+                ret += '\n';
+            }
         }
         return ret;
     }
+
+    void printTableHeader(bool nt = true){
+        // first pass print the column headers
+        auto terms = (nt)? terminals: nonterminals;
+        printf("%10.10s", "");// empty cell at the top left of the table
+        // first row has the first.second of every pair starting with GOAL, which is the terminal
+        // subsequent rows have the label, and then the values respective to the column
+        for (auto t : terms) {
+            printf("%10.10s", SymbolToString::getString(t).c_str());
+        }
+        cout << '\n';
+    }
+    void showTable(){
+        printTableHeader();
+        for(auto nt : nonterminals){
+            printf("%10.10s", SymbolToString::getString(nt).c_str());
+            for(auto t: terminals){
+                auto x = table.at({nt, t});
+                if(x != ERROR){
+                    printf("%10.10s", to_string(x).c_str());
+                }else{
+                    printf("%10.10s", " ");
+                }
+            }
+            cout << '\n';
+        }
+    }
+
+    void showFirstAndFollow(){
+        printTableHeader(true);
+        for(auto firstSet: first){
+
+        }
+    };
 
     void ParserGenerator(){
 
     }
 
-    static ArithmeticParser* getInstance(){
+    static ArithmeticParser* getInstance(vector<Production>& p){
         if(ArithmeticParser::singleton == nullptr){
-            return new ArithmeticParser();
+            return new ArithmeticParser(p);
         }
         return ArithmeticParser::singleton;
+    }
+
+    bool endCheck(int x){
+        if(x == INT16_MAX) return true;
+        else return false;
+    }
+
+    pair<bool, string> skeletonParser(Tokenizer* t){
+        //TODO discard whitespace
+        auto s = stack<Symbol>();
+        auto token = t->nextToken();
+        string ret = "";
+        if(endCheck(get<0>(token))){
+            return {false, ret};
+        }
+        pair<tokenTypes, basic_string<char>>word = {(tokenTypes) get<1>(token), get<2>(token)};
+        s.push(EOF_);
+        s.push(grammar[0].lhs);
+        Symbol focus;
+        while(true){
+            /*TODO*/
+            focus = s.top();
+            if((int) focus == (int) EOF_ && MatchSymbolToToken::reverse(token) == (int) EOF_){
+                // report success and return or break
+                ret += get<2>(token);
+                return {true, ret};
+            }
+            else if (terminals.find(focus) != terminals.end()){ // EOF is a terminal so || focus == eof is implicit
+                if(MatchSymbolToToken::match(focus, word.first)){
+                    s.pop();
+                    ret += get<2>(token);
+                    token = t->nextToken();
+                    if(endCheck(get<0>(token))){
+                        return {false, ret};
+                    }
+                    word = {(tokenTypes) get<1>(token), get<2>(token)};
+                }
+                else{
+                    //error when looking for symbol in focus
+                    return {true, "<Expected " + SymbolToString::getString(focus) + ", got token " + get<2>(token) + " with token type " + tokenIdstrings[get<1>(token)] + "\n"};
+                }
+            }
+            else{ // focus is nonterminal
+                Symbol wordFromToken = MatchSymbolToToken::reverse(token);
+                auto it = table.find({focus,wordFromToken});
+                if( it != table.end() && it->second != ERROR){ // found
+                    s.pop();
+                    auto prod = productions[it->second];
+                    for (int i = prod.size()-1; i >= 0; --i) {
+                        if(prod.at(i) != EOF_ && prod.at(i) != EPSILON){
+                            s.push(prod.at(i));
+                        }
+                    }
+                }else{
+                    //error expanding focus.
+                    return {true, "<Could not expand focus at " + SymbolToString::getString(focus) + ", with token " + get<2>(token) + " of type " + tokenIdstrings[get<1>(token)] + "\n"};
+                }
+            }
+        }
     }
 
 };
@@ -357,6 +484,97 @@ ArithmeticParser* ArithmeticParser::singleton = nullptr;
 
 
 int main(){
+    auto grammar = vector<Production>({
+        Production {GOAL, {
+            {LINEFULL}
+        }},
+        Production {LINEFULL, {{EXPR}}},
+        Production {EXPR, {
+                {LTERM_ADD_SUB, ADD_SUB},
+
+        }},
+        Production {LTERM_ADD_SUB, {
+                {LTERM_MULT_DIV, MULT_DIV},
+        }},
+        Production {LTERM_MULT_DIV, {
+                {LTERM_POWER, POWER_NT},
+        }},
+        Production {RTERM_ADD_SUB, {
+                {RTERM_MULT_DIV, MULT_DIV},
+        }},
+        Production {RTERM_MULT_DIV, {
+                {RTERM_POWER, POWER_NT},
+        }},
+        Production {ADD_SUB, {
+                {PLUS, RTERM_ADD_SUB, ADD_SUB},
+                {MINUS, RTERM_ADD_SUB, ADD_SUB},
+                {EPSILON},
+        }},
+        Production {MULT_DIV, {
+                {MULT_DIV_AND_RIGHT_OP},
+                {EPSILON}
+        }},
+        Production {MULT_DIV_AND_RIGHT_OP, {
+                {MULTIPLY, RTERM_MULT_DIV, MULT_DIV},
+                {DIVIDE, RTERM_MULT_DIV, MULT_DIV}
+        }},
+        Production {POWER_NT, {
+                {POWER_AND_RIGHT_OP},
+                {EPSILON}
+        }},
+        Production {POWER_AND_RIGHT_OP, {
+                {POWER, RTERM_POWER, POWER_NT},
+        }},
+        Production {LTERM_POWER, {
+                {GTERM_SIGN},
+        }},
+        Production {RTERM_POWER, {
+                {GTERM_SIGN},
+        }},
+        Production {GTERM_SIGN, {
+                {GTERM},
+                {MINUS, GTERM}
+        }},
+        Production {GTERM, {
+                {PARENS},
+                {NAME_},
+                {NUM},
+        }},
+        Production {PARENS, {
+                {LEFT_PAREN,EXPR, RIGHT_PAREN},
+        }},
+    });
+    auto p = ArithmeticParser::getInstance(grammar);
+    cout << p->grammarToString();
+    p->showTable();
+
+    Tokenizer t("LL1toIR.txt");
+    int count = 1;
+    auto validLines = vector<list<string>>();
+    while (true){
+        // TODO
+        auto parsedToken = p->skeletonParser(&t);
+        if(parsedToken.first){
+            // optimization and IR
+            validLines.push_back(ShuntingYard::arithmeticShunt(parsedToken.second));
+            cout << "Successfully parsed line " << count << ' '<< parsedToken.second << "Postfix: ";
+            for ( auto i : validLines.back()) {
+                cout << i;
+                //optimize here?
+            }
+
+        }else{
+            cout << "Successfully parsed line " << count << ' '<< parsedToken.second << "Postfix: ";
+            break;
+        }
+        ++count;
+    }
+
+    delete p;
+    return 0;
+}
+
+/*"Classic" Arithmetic Parser from the book:
     auto Goal = Production{GOAL, {{EXPR}}};
     auto Expr = Production{EXPR, {{TERM, EXPR_PRIME}}};
     auto ExprPrime = Production{
@@ -383,16 +601,8 @@ int main(){
         {
                 {LEFT_PAREN, EXPR, RIGHT_PAREN},
                 {NUM},
-                {NAME_}
+                {NAME_},
+                {NEG_NUM},
+                {NEG_NAME_},
         }};
-    auto p = ArithmeticParser::getInstance();
-    p->grammar = {Goal, Expr, ExprPrime, Term, TermPrime, Factor};
-    cout << p->grammarToString();
-    p->removeIndirectLeftRecursion();
-    cout << p->grammarToString();
-    auto FIRST = p->getFirstSet();
-    auto FOLLOW = p->getFollowSet(FIRST);
-    auto START = p->getStartSet(FIRST, FOLLOW);
-    auto TABLE = p->tableGenerator(FIRST, START);
-    delete p;
-}
+ * */

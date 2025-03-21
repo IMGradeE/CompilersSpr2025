@@ -9,16 +9,11 @@
 #include <fstream>
 #include <set>
 #include "GlobalEnums.h"
+#include "ShuntingYard.h"
+
 using namespace std;
 int epsilonInvocations = 0, deltaInvocations = 0, epsilonHelperInvocations = 0, nfaStates = 0;
-enum spec{ // OR, CONCAT, and STAR integer values can be compared to establish precedence between op symbols
-    RPAREN = -6,
-    LPAREN,
-    OR,
-    CONCAT,
-    STAR,
-    LAMBDA
-};
+
 // This is all for a scanner that isn't only for arithmetic.
 /*
 enum tokenTypes{
@@ -89,83 +84,18 @@ string tokenIdstrings[] = {
                             "INVALID"
 };*/
 
-
 string patternStrings[] = {
-        "-+/+\\*+^+\\+",
-        "\\(",
-        "\\)",
+        "-+/+\\*+^+\\+", // TODO right associativity
         "(0+1+2+3+4+5+6+7+8+9).(0+1+2+3+4+5+6+7+8+9)*", // NUMBER,
         "(0+1+2+3+4+5+6+7+8+9)*.\\..(0+1+2+3+4+5+6+7+8+9)*",
         "(a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w+x+y+z+A+B+C+D+E+F+G+H+I+J+K+L+M+N+O+P+Q+R+S+T+U+V+W+X+Y+Z).((_)+(0+1+2+3+4+5+6+7+8+9)+(a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w+x+y+z+A+B+C+D+E+F+G+H+I+J+K+L+M+N+O+P+Q+R+S+T+U+V+W+X+Y+Z))*", // NAME
+        "\\(",
+        "\\)",
         "\r.\n+\n.\r+\n+\r+\v+\f",// ENDL
         " *"
 };
-string tokenIdstrings[] = {
-        "OPERATOR",
-        "OPENPAREN",
-        "CLOSEPAREN",
-        "INT",
-        "FLOAT",
-        "NAME",
-        "ENDL",
-        "WHITESPACE",
-};
 
-void accumulate(string& accumulator, queue<char>& output){
-    for(char c: accumulator){
-        output.push(c);
-    }
-    accumulator.clear();
-}
 
-queue<char> shuntingYard(string workingString){
-    queue output = queue<char>();
-    stack operators = stack<char>();
-    char rawToken;
-    string accumulator;
-    while(!workingString.empty()){ // while there are still characters to process
-
-        rawToken = workingString.front(); // get first character
-        workingString = workingString.substr(1); // delete first character from the working string
-
-        if(rawToken >= 0) { // if the token character is not an operator
-            accumulator += rawToken;
-        }else {
-            if(!accumulator.empty()) {
-                accumulate(accumulator, output);
-            }
-            if (rawToken == STAR || rawToken == OR || rawToken == CONCAT) {
-                while (!operators.empty() && operators.top() != LPAREN && (operators.top() > rawToken || rawToken == operators.top())) {
-                    // all operators in our expressions are left associative, and only have the same precedence when they are the same character.
-                    accumulator += operators.top();
-                    operators.pop();
-                    accumulate(accumulator, output);
-                }
-                operators.push(rawToken);
-            } else if (rawToken == LPAREN) {
-                operators.push(rawToken);
-            } else if (rawToken == RPAREN) {
-                while (operators.top() != LPAREN) {
-                    if (operators.empty()) throw EACCES;
-                    accumulator += operators.top();
-                    accumulate(accumulator, output);
-                    operators.pop();
-                }
-                operators.pop(); // discard right paren )
-            }
-        }
-        if(!accumulator.empty() && workingString.empty()){
-            accumulate(accumulator, output);
-        }
-    }
-    while(!operators.empty()){
-        if (operators.top() == LPAREN || operators.top() == RPAREN) throw EACCES;
-        accumulator += operators.top();
-        accumulate(accumulator, output);
-        operators.pop();
-    }
-    return output;
-}
 
 class state{
     public:
@@ -253,10 +183,10 @@ pair <state*, state*> unionNFAs(pair<state*, state*> NFA1, pair<state*, state*> 
     auto sv = vector<state*>(); // isInitialState transition function vector
     sv.push_back(NFA1.first); // push the isInitialState state of NFA1 into starts' lambda transition function vector
     sv.push_back(NFA2.first); // push the isInitialState state of NFA2 into starts' lambda transition function vector
-    start->transitions.insert({LAMBDA, sv}); // insert with key LAMBDA
+    start->transitions.insert({ShuntingYard::LAMBDA, sv}); // insert with key ShuntingYard::LAMBDA
 
-    NFA1.second->transitions.insert({LAMBDA, vector<state*>(1, end)}); // add a lambda transition from NFA1's isAcceptingState state to the new common isAcceptingState state
-    NFA2.second->transitions.insert({LAMBDA, vector<state*>(1, end)}); // add a lambda transition from NFA2's isAcceptingState state to the new common isAcceptingState state
+    NFA1.second->transitions.insert({ShuntingYard::LAMBDA, vector<state*>(1, end)}); // add a lambda transition from NFA1's isAcceptingState state to the new common isAcceptingState state
+    NFA2.second->transitions.insert({ShuntingYard::LAMBDA, vector<state*>(1, end)}); // add a lambda transition from NFA2's isAcceptingState state to the new common isAcceptingState state
     // clean up NFA 1&2
     setInnerStates(NFA1);
     setInnerStates(NFA2);
@@ -269,7 +199,7 @@ pair <state*, state*> concatNFAs(pair<state*, state*>& NFA1, const pair<state*, 
 
     // naive implementation is just to lambda transition from the old isAcceptingState of NFA1 to the old isInitialState of NFA2 so that's what I'm doing
 
-    NFA1.second->transitions.insert({LAMBDA, vector<state*>(1, NFA2.first)});
+    NFA1.second->transitions.insert({ShuntingYard::LAMBDA, vector<state*>(1, NFA2.first)});
 
     return {NFA1.first, NFA2.second};
 }
@@ -281,12 +211,12 @@ pair <state*, state*> closeNFA(pair<state*, state*> NFA) {
     NFA.second->isAcceptingState = false;
 
     // insert a transition from NFAs' old isAcceptingState state to its isInitialState state via lambda
-    NFA.second->transitions.insert({LAMBDA, vector<state*>(1, NFA.first)});
+    NFA.second->transitions.insert({ShuntingYard::LAMBDA, vector<state*>(1, NFA.first)});
     // add a lambda transition from the old isAcceptingState state to the new isAcceptingState state
-    NFA.second->transitions.at(LAMBDA).push_back(end);
+    NFA.second->transitions.at(ShuntingYard::LAMBDA).push_back(end);
 
-    start->transitions.insert({LAMBDA, vector<state*>(1, end)});
-    start->transitions.at(LAMBDA).push_back(NFA.first);
+    start->transitions.insert({ShuntingYard::LAMBDA, vector<state*>(1, end)});
+    start->transitions.at(ShuntingYard::LAMBDA).push_back(NFA.first);
     return {start, end};
 }
 
@@ -303,13 +233,13 @@ pair<state*,state*> toNFA(queue<char> input){
             s.push(getNFA(c));
         }else {// operator
             // pop the argument NFA(s) off the stack, do op, push result onto stack
-            if(c == OR){
+            if(c == ShuntingYard::OR){
                 auto s2 = s.top(); // newer
                 s.pop();
                 auto s1 = s.top(); // older
                 s.pop();
                 s.push(unionNFAs(s1, s2));
-            }else if(c == STAR){
+            }else if(c == ShuntingYard::STAR){
                 auto s1 = s.top();
                 s.pop();
                 s.push(closeNFA(s1));
@@ -335,7 +265,7 @@ set<state*> followEpsilonHelper(set<state*> parentTF){
             if(t->visited) continue;
             t->visited = true;
             try {
-                for (auto item : t->transitions.at(LAMBDA)) {
+                for (auto item : t->transitions.at(ShuntingYard::LAMBDA)) {
                     if(!item->visited){
                         parentTF.insert(item);
                     }
@@ -352,7 +282,7 @@ list<state*> followEpsilon(const list<state*>& stateList) {
     list<state*> epsilon = list<state*>(stateList);
     for (auto curr: stateList) {
         try {
-            auto tvec = curr->transitions.at(LAMBDA);
+            auto tvec = curr->transitions.at(ShuntingYard::LAMBDA);
             set<state*> temp;
             for (auto t : tvec) {
                 temp.insert(t);
@@ -441,21 +371,21 @@ void ScannerGenerator() {
                 continue;
             }
             if (c == '.') {
-                string1 += (char) CONCAT;
+                string1 += (char) ShuntingYard::CONCAT;
             } else if (c == '+') {
-                string1 += (char) OR;
+                string1 += (char) ShuntingYard::OR;
             } else if (c == '*') {
-                string1 += (char) STAR;
+                string1 += (char) ShuntingYard::STAR;
             } else if (c == '(') {
-                string1 += (char) LPAREN;
+                string1 += (char) ShuntingYard::LPAREN;
             } else if (c == ')') {
-                string1 += (char) RPAREN;
+                string1 += (char) ShuntingYard::RPAREN;
             } else {
                 string1 += lstr[j];
             }
         }
 
-        queue<char> postfixPattern = shuntingYard(string1);
+        queue<char> postfixPattern = ShuntingYard::regexShunt(string1);
         // uncomment to look at shunting yard output if you want I guess
         /*
         auto tokens = postfixPattern; // copy so we don't empty the queue we're building our NFA from
@@ -479,7 +409,7 @@ void ScannerGenerator() {
     for (int j = 0; j < NFAs.size(); ++j) {
         startStates.push_back(NFAs[j].first);
     }
-    startState->transitions.insert({LAMBDA, startStates});
+    startState->transitions.insert({ShuntingYard::LAMBDA, startStates});
 
     // convert to dfa, preserve end states
     auto Q = vector<list<state*>>();
@@ -597,8 +527,8 @@ tuple<int, int, string> scanner(const string& input, vector<DFAState*>& scannerT
     }
 
     if (currentState->isAcceptingState) {
-        if(iscntrl(lexeme[0])){
-            string prefix;
+        /*if(iscntrl(lexeme[0])){
+            *//*string prefix;
             if(lexeme.length() == 2) {
                 if (lexeme == "\r\n") prefix = "\\r\\n";
                 else if (lexeme == "\r\n")prefix = "\\n\\r";
@@ -607,113 +537,70 @@ tuple<int, int, string> scanner(const string& input, vector<DFAState*>& scannerT
                 if (lexeme[0] == '\n') prefix = "\\n";
                 else if (lexeme[0] == '\r') prefix = "\\r";
                 lexeme = prefix + lexeme.substr(1,lexeme.length());
-            }
-        }
+            }*//*
+        }*/
         return {streamPos, currentState->type, lexeme};
     }else{
         return {lexeme.length(), INVALID, lexeme};
     }
 }
-
-int main() {
+class Tokenizer{
+public:
     fstream f;
+    string input;
+    vector<DFAState*> scanner_;
+    int size;
 
-    /*f.open("parser_text_hw2.txt");*/
-    f.open("a_b_or_c_test.txt");
-    if(!f.is_open()) {
-        cout<< "The file referenced in the CLI arguments did not exist in the current directory. Resolve this issue and try again.";
-        return -1;
+    Tokenizer(string fileName){
+        f.open(fileName);
+        if(!f.is_open()) {
+            cout<< "The file referenced in the CLI arguments did not exist in the current directory. Resolve this issue and try again.";
+        }
+        f.seekg(0,ios::end);
+        size = f.tellg();
+        f.seekg(0,ios::beg);
+        input = string(size, '\0');
+        f.seekg(ios::beg);
+        f.read(&input[0], size);
+        f.close();
+        ScannerGenerator();
+        scanner_ = DFAState::states;
     }
-    f.seekg(0,ios::end);
-    int size = f.tellg();
-    f.seekg(0,ios::beg);
-    string input = string(size, '\0');
-    f.seekg(ios::beg);
-    f.read(&input[0], size);
-    f.close();
-
-
-    ScannerGenerator();
-    auto scanner_ = DFAState::states;
-    while (size > 0){
-        if(input.length() > 1){
-            if(input[0] == '/' && input[1] == '/' ){
-                while(!iscntrl(input[0])){
+    tuple<int, int, string> nextToken() {
+        if(input.length() != 0){
+            if(input.length() > 1){
+                // consume comments
+                if(input[0] == '/' && input[1] == '/' ){
+                    while(!iscntrl(input[0])){
+                        input = input.substr(1, input.length());
+                        --size;
+                    }
+                    input = input.substr(1, input.length());
+                    --size;
+                }else if(input[0] =='/' && input[1] =='*'){
+                    while(input[0] == '*' && input[1] =='/'){
+                        input = input.substr(1, input.length());
+                        --size;
+                    }
                     input = input.substr(1, input.length());
                     --size;
                 }
-                input = input.substr(1, input.length());
-                --size;
-            }else if(input[0] =='/' && input[1] =='*'){
-                while(input[0] == '*' && input[1] =='/'){
-                    input = input.substr(1, input.length());
-                    --size;
-                }
-                input = input.substr(1, input.length());
-                --size;
             }
-
-        }
-        auto token = scanner(input, scanner_);
-        if(get<1>(token) == ENDL) {
-            cout << '\n';
-        }
-        else{
-            cout << get<2>(token) << ",";
-        }
-        if(get<0>(token) <= 0) get<0>(token) = 1;
+            auto token = scanner(input, scanner_);
             input = input.substr(get<0>(token), input.length());
             size -= get<0>(token);
-    }
-    cout<< "\n";
-    f.open("a_b_or_c_test.txt");
-    if(!f.is_open()) {
-        cout<< "The file referenced in the CLI arguments did not exist in the current directory. Resolve this issue and try again.";
-        return -1;
-    }
-    f.seekg(0,ios::end);
-    size = f.tellg();
-    f.seekg(0,ios::beg);
-    input = string(size, '\0');
-    f.seekg(ios::beg);
-    f.read(&input[0], size);
-    f.close();
-    while (size > 0){
-        if(input.length() > 1){
-            if(input[0] == '/' && input[1] == '/' ){
-                while(!iscntrl(input[0])){
-                    input = input.substr(1, input.length());
-                    --size;
-                }
-                input = input.substr(1, input.length());
-                --size;
-            }else if(input[0] =='/' && input[1] =='*'){
-                while(input[0] == '*' && input[1] =='/'){
-                    input = input.substr(1, input.length());
-                    --size;
-                }
-                input = input.substr(1, input.length());
-                --size;
+            if (get<1>(token) != WHITESPACE) {
+                return token;
+            } else {
+                return nextToken();
             }
+        }else{
+            return {INT16_MAX, INT16_MAX, "End Of Input"};
         }
-        auto token = scanner(input, scanner_);
-        char end = ((get<1>(token) == ENDL))? '\n' : ' ';
-        cout << '<'<< tokenIdstrings[get<1>(token)] << ": " << get<2>(token) << " >" << end;
-        if(get<0>(token) <= 0) get<0>(token) = 1;
-        input = input.substr(get<0>(token), input.length());
-        size -= get<0>(token);
     }
-    f.open("invocations.txt", ios::out);
-    if(!f.is_open()) {
-        cout<< "The file referenced in the CLI arguments did not exist in the current directory. Resolve this issue and try again.";
-        return -1;
+    ~Tokenizer(){
+        delete scanner_[0];
     }
-    char invocationCount[96];
-    sprintf(invocationCount, "Epsilon: %d, EpsilonHelper: %d, Delta: %d, n (nfa states): %d", epsilonInvocations, epsilonHelperInvocations, deltaInvocations, nfaStates);
-    cout << invocationCount;
-    f.write(invocationCount, 96);
-    f.close();
-    delete scanner_[0];
-    return 0;
-}
+};
+
 
