@@ -57,7 +57,6 @@ int main() {
 #include <vector>
 #include <map>
 #include <set>
-#include "GlobalEnums.h"
 #include "main.cpp"
 
 using namespace std;
@@ -424,13 +423,13 @@ public:
         else return false;
     }
 
-    pair<bool, string> skeletonParser(Tokenizer* t){
+    pair<int, string> skeletonParser(Tokenizer* t){
         //TODO discard whitespace
         auto s = stack<Symbol>();
         auto token = t->nextToken();
         string ret = "";
         if(endCheck(get<0>(token))){
-            return {false, ret};
+            return {0, ret};
         }
         pair<tokenTypes, basic_string<char>>word = {(tokenTypes) get<1>(token), get<2>(token)};
         s.push(EOF_);
@@ -442,7 +441,7 @@ public:
             if((int) focus == (int) EOF_ && MatchSymbolToToken::reverse(token) == (int) EOF_){
                 // report success and return or break
                 ret += get<2>(token);
-                return {true, ret};
+                return {1, ret};
             }
             else if (terminals.find(focus) != terminals.end()){ // EOF is a terminal so || focus == eof is implicit
                 if(MatchSymbolToToken::match(focus, word.first)){
@@ -450,13 +449,13 @@ public:
                     ret += get<2>(token);
                     token = t->nextToken();
                     if(endCheck(get<0>(token))){
-                        return {false, ret};
+                        return {0, ret};
                     }
                     word = {(tokenTypes) get<1>(token), get<2>(token)};
                 }
                 else{
                     //error when looking for symbol in focus
-                    return {true, "<Expected " + SymbolToString::getString(focus) + ", got token " + get<2>(token) + " with token type " + tokenIdstrings[get<1>(token)] + "\n"};
+                    return {2, "<Expected " + SymbolToString::getString(focus) + ", got token " + get<2>(token) + " with token type " + tokenIdstrings[get<1>(token)] + "\n"};
                 }
             }
             else{ // focus is nonterminal
@@ -472,7 +471,7 @@ public:
                     }
                 }else{
                     //error expanding focus.
-                    return {true, "<Could not expand focus at " + SymbolToString::getString(focus) + ", with token " + get<2>(token) + " of type " + tokenIdstrings[get<1>(token)] + "\n"};
+                    return {2, "<Could not expand focus at " + SymbolToString::getString(focus) + ", with token " + get<2>(token) + " of type " + tokenIdstrings[get<1>(token)] + "\n"};
                 }
             }
         }
@@ -554,15 +553,23 @@ int main(){
     while (true){
         // TODO
         auto parsedToken = p->skeletonParser(&t);
-        if(parsedToken.first){
+        if(parsedToken.first == 1){
             // optimization and IR
-            validLines.push_back(ShuntingYard::arithmeticShunt(parsedToken.second));
-            cout << "Successfully parsed line " << count << ' '<< parsedToken.second << "Postfix: ";
-            for ( auto i : validLines.back()) {
-                cout << i;
-                //optimize here?
+            try {
+                validLines.push_back(ShuntingYard::arithmeticShunt(parsedToken.second));
+                cout << "Successfully parsed line " << count << ' '<< parsedToken.second << "Postfix: ";
+                for ( auto i : validLines.back()) {
+                    cout << i;
+                    //optimize here?
+                }
+                cout<<"\n";
+            }catch(exception &e) {
+                cout << e.what();
+                cout<< "imbalanced parenthesis in expression " << parsedToken.second;
             }
 
+        }else if(parsedToken.first == 2){
+            cout << "Failed parsing line " << count << ' '<< parsedToken.second << "Postfix: ";
         }else{
             cout << "Successfully parsed line " << count << ' '<< parsedToken.second << "Postfix: ";
             break;

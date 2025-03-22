@@ -1,11 +1,9 @@
 #include <iostream>
-#include <cstdlib>
 #include <stack>
 #include <string>
 #include <queue>
 #include <map>
 #include <list>
-#include <algorithm>
 #include <fstream>
 #include <set>
 #include "GlobalEnums.h"
@@ -566,6 +564,7 @@ public:
         ScannerGenerator();
         scanner_ = DFAState::states;
     }
+
     tuple<int, int, string> nextToken() {
         if(input.length() != 0){
             if(input.length() > 1){
@@ -575,18 +574,21 @@ public:
                         input = input.substr(1, input.length());
                         --size;
                     }
-                    input = input.substr(1, input.length());
+                    input = input.substr(2, input.length());
                     --size;
                 }else if(input[0] =='/' && input[1] =='*'){
                     while(input[0] == '*' && input[1] =='/'){
                         input = input.substr(1, input.length());
                         --size;
                     }
-                    input = input.substr(1, input.length());
+                    input = input.substr(2, input.length()); // CLRF is 2 chars wide
                     --size;
                 }
             }
             auto token = scanner(input, scanner_);
+            if (get<1>(token) == INVALID){
+                input = input.substr(1, input.length());
+            }
             input = input.substr(get<0>(token), input.length());
             size -= get<0>(token);
             if (get<1>(token) != WHITESPACE) {

@@ -65,7 +65,8 @@ public:
                     operators.push(rawToken);
                 } else if (rawToken == RPAREN) {
                     while (operators.top() != LPAREN) {
-                        if (operators.empty()) throw EACCES;
+                        if (operators.empty())
+                            throw exception();
                         accumulator += operators.top();
                         accumulate(accumulator, output);
                         operators.pop();
@@ -78,7 +79,8 @@ public:
             }
         }
         while(!operators.empty()){
-            if (operators.top() == LPAREN || operators.top() == RPAREN) throw EACCES;
+            if (operators.top() == LPAREN || operators.top() == RPAREN)
+                throw EACCES;
             accumulator += operators.top();
             accumulate(accumulator, output);
             operators.pop();
@@ -93,31 +95,36 @@ public:
         string accumulator;
         while(!workingString.empty()){ // while there are still characters to process
             rawToken = workingString.front(); // get first character
+            if(iscntrl(rawToken)){
+                workingString = workingString.substr(2); // delete first character from the working string
+                continue;
+            }
             workingString = workingString.substr(1); // delete first character from the working string
             auto it = Map.find((spec) rawToken);
-            if(it == Map.end()) { // if the token character is not an operator
+            if(it == Map.end() ) { // if the token character is not an operator
                 accumulator += rawToken;
             }else {
                 if(!accumulator.empty()) {
                     output.push_back(accumulator);
                     accumulator.clear();
                 }
-                if (it->first != LEFT_PAREN && it->first != RIGHT_PAREN && !operators.empty()) {
-                    auto O_2 = operators.top();
-                    while (!operators.empty() && O_2.first != LEFT_PAREN &&
-                            (O_2.second.first > it->second.first || (it->second.first == O_2.second.first && it->second.second =='l'))) {
-                        accumulator += ((char) O_2.first);
-                        operators.pop();
-                        output.push_back(accumulator);
-                    }
-                    operators.push(*it);
-                } else if (it->first == LEFT_PAREN) {
+                while (!operators.empty() &&  operators.top().first != LEFT_PAREN &&
+                        ( operators.top().second.first > it->second.first || (it->second.first ==  operators.top().second.first && it->second.second =='l'))) {
+                    accumulator += ((char)  operators.top().first);
+                    operators.pop();
+                    output.push_back(accumulator);
+                    accumulator.clear();
+                }
+                operators.push(*it);
+                if (it->first == LEFT_PAREN) {
                     operators.push(*it);
                 } else if (it->first == RIGHT_PAREN) {
                     while (!operators.empty() && operators.top().first != LEFT_PAREN) {
-                        if (operators.empty()) throw EACCES;
+                        if (operators.empty())
+                            throw EACCES;
                         accumulator += (char)operators.top().first;
                         output.push_back(accumulator);
+                        accumulator.clear();
                         operators.pop();
                     }
                     operators.pop(); // discard right paren )
@@ -125,13 +132,16 @@ public:
             }
             if(!accumulator.empty() && workingString.empty()){
                 output.push_back(accumulator);
+                accumulator.clear();
             }
         }
         while(!operators.empty()){
-            if (operators.top().first == LEFT_PAREN || operators.top().first == RIGHT_PAREN) throw EACCES;
+            if (operators.top().first == LEFT_PAREN || operators.top().first == RIGHT_PAREN)
+                throw exception();
             accumulator += (char) operators.top().first;
             output.push_back(accumulator);
             operators.pop();
+            accumulator.clear();
         }
         return output;
     }
