@@ -16,7 +16,8 @@ enum tokenTypes{
     ENDL,
     WHITESPACE,
     INVALID = -2,
-    END = -1
+    END = -1,
+    UNARY_MINUS = -7,
 };
 std::string tokenIdstrings[] = {
         "OPERATOR",

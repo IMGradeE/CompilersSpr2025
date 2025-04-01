@@ -8,9 +8,10 @@
 #include <set>
 #include "GlobalEnums.h"
 #include "ShuntingYard.h"
+#include "DFASerializer.cpp"
 
 using namespace std;
-int epsilonInvocations = 0, deltaInvocations = 0, epsilonHelperInvocations = 0, nfaStates = 0;
+int epsilonInvocations = 0, deltaInvocations = 0, epsilonHelperInvocations = 0;
 
 // This is all for a scanner that isn't only for arithmetic.
 /*
@@ -129,35 +130,6 @@ class state{
 int state::statID = 0;
 vector<state*> state::states=vector<state*>();
 
-class DFAState{
-    static int statID;
-public:
-    DFAState() {
-        id = statID;
-        ++statID;
-        visited = false;
-        isAcceptingState = false;
-        type = INVALID;
-        states.push_back(this);
-    }
-    bool  isAcceptingState, visited;
-    bool operator==(const state &rhs) const{
-        return (this->id == rhs.id);
-    }
-    bool operator!=(const state &rhs) const{
-        return !(*this == rhs);
-    }
-    static vector<DFAState*> states;
-    int type;
-    map<char, DFAState*> transitions =  map<char, DFAState*>();
-
-    ~DFAState(){
-    }
-
-    int id = 0;
-};
-int DFAState::statID = 0;
-vector<DFAState*> DFAState::states=vector<DFAState*>();
 
 pair<state*, state*> getNFA(char c){
     auto start = new state();
@@ -334,21 +306,6 @@ int Qcontains(const vector<list<state*>>& Q, const list<state*>& Qitem) {
     return -1;
 }
 
-/*void DFAToFile(vector<state*> DFA){
-    fstream f;
-    f.open("DFA.txt", ios::out);
-    if(!f.is_open()) {
-        cout << "DFA.txt could not be created or opened.";
-    }
-
-    for (auto s : DFA) {
-        char
-        f.write();
-
-    }
-
-    f.close();
-}*/
 void ScannerGenerator() {
     // a(a+b)*b -> aab+*.b. => "a.(a+b)*.b"
     // Does not properly parse statements like ab* or (a+b)a+b where an implicit subexpr is operated on unless concatenation is specified explicitly.
@@ -400,7 +357,6 @@ void ScannerGenerator() {
         ++i;
         NFAs.push_back(NFA);
     }
-    nfaStates = state::states.size();
     auto startState = new state();
     auto startStates = vector<state*>();
 
@@ -454,6 +410,7 @@ void ScannerGenerator() {
         }
 
     }
+    serializeDFA(DFAState::states);
     return;
 }
 
@@ -468,82 +425,75 @@ int getIndexOf(const vector<DFAState*>& states, const DFAState* arg) {
 void truncate(string& lexeme) {
     lexeme = lexeme.substr(0, lexeme.length() - 1); // TODO verify
 }
-tuple<int, int, string> scanner(const string& input, vector<DFAState*>& scannerTable) {
-    // non-minimal DFA represented by an array of states DFA_states TODO minimize
 
-    static auto bad = new DFAState();
-    static auto error = new DFAState();
-    static int count = 0;
-    if (count == 0){
-        scannerTable.push_back(bad);
-        scannerTable.push_back(error);
-        bad->id = -1;
-        ++count;
-    }
+class Tokenizer{
+    tuple<int, int, string> scanner(const string& input, vector<DFAState*>& scannerTable) {
+        // non-minimal DFA represented by an array of states DFA_states TODO minimize
 
-    int streamPos = 0;
-    auto Stack = stack<pair<DFAState*, int>>();
-    vector<vector<bool>> Failed = vector<vector<bool>>(input.length()+1, vector<bool>(scannerTable.size(), false));
+        static auto bad = new DFAState();
+        static auto error = new DFAState();
+        static int count = 0;
+        if (count == 0){
+            scannerTable.push_back(bad);
+            scannerTable.push_back(error);
+            bad->id = -1;
+            ++count;
+        }
 
-    string lexeme;
-    auto currentState = scannerTable[0];
-    char c;
-    Stack.push({bad, -1});
+        int streamPos = 0;
+        auto Stack = stack<pair<DFAState*, int>>();
+        vector<vector<bool>> Failed = vector<vector<bool>>(input.length()+1, vector<bool>(scannerTable.size(), false));
 
-    while (currentState != error && currentState != bad) {
-        if (Failed[streamPos][getIndexOf(scannerTable, currentState)]) {
+        string lexeme;
+        auto currentState = scannerTable[0];
+        char c;
+        Stack.push({bad, -1});
+
+        while (currentState != error && currentState != bad) {
+            if (Failed[streamPos][getIndexOf(scannerTable, currentState)]) {
+                currentState = Stack.top().first;
+                streamPos = Stack.top().second;
+                Stack.pop();
+                truncate(lexeme);
+                break; //TODO
+            }
+            c = input[streamPos]; // get character from the inputstream at index streamPos
+            lexeme += c; // concatenate the character to lexeme
+            if (currentState->isAcceptingState) {
+                Stack = stack<pair<DFAState*, int>>();
+                Stack.push({bad, -1});
+            }
+            Stack.push({currentState, streamPos});
+            try {
+                currentState = currentState->transitions.at(c);
+            }catch (exception &e) {
+                currentState = error;
+            }
+            ++streamPos;
+        }
+        while (!currentState->isAcceptingState && currentState != bad) {
+            if (currentState != error) {
+                Failed[streamPos][getIndexOf(scannerTable, currentState)] = true;
+            }
             currentState = Stack.top().first;
             streamPos = Stack.top().second;
             Stack.pop();
-            truncate(lexeme);
-            break; //TODO
+            if (currentState != bad) {
+                truncate(lexeme);
+            }
         }
-        c = input[streamPos]; // get character from the inputstream at index streamPos
-        lexeme += c; // concatenate the character to lexeme
-        if (currentState->isAcceptingState) {
-            Stack = stack<pair<DFAState*, int>>();
-            Stack.push({bad, -1});
-        }
-        Stack.push({currentState, streamPos});
-        try {
-            currentState = currentState->transitions.at(c);
-        }catch (exception &e) {
-            currentState = error;
-        }
-        ++streamPos;
-    }
-    while (!currentState->isAcceptingState && currentState != bad) {
-        if (currentState != error) {
-            Failed[streamPos][getIndexOf(scannerTable, currentState)] = true;
-        }
-        currentState = Stack.top().first;
-        streamPos = Stack.top().second;
-        Stack.pop();
-        if (currentState != bad) {
-            truncate(lexeme);
-        }
-    }
 
-    if (currentState->isAcceptingState) {
-        /*if(iscntrl(lexeme[0])){
-            *//*string prefix;
-            if(lexeme.length() == 2) {
-                if (lexeme == "\r\n") prefix = "\\r\\n";
-                else if (lexeme == "\r\n")prefix = "\\n\\r";
-                lexeme = prefix + lexeme.substr(2,lexeme.length());
-            }else{
-                if (lexeme[0] == '\n') prefix = "\\n";
-                else if (lexeme[0] == '\r') prefix = "\\r";
-                lexeme = prefix + lexeme.substr(1,lexeme.length());
-            }*//*
-        }*/
-        return {streamPos, currentState->type, lexeme};
-    }else{
-        return {lexeme.length(), INVALID, lexeme};
+        if (currentState->isAcceptingState) {
+            if(iscntrl(lexeme[0])){
+                ++line;
+            }
+            return {streamPos, currentState->type, lexeme};
+        }else{
+            return {lexeme.length(), INVALID, lexeme};
+        }
     }
-}
-class Tokenizer{
 public:
+    int line = 0;
     fstream f;
     string input;
     vector<DFAState*> scanner_;
@@ -561,7 +511,12 @@ public:
         f.seekg(ios::beg);
         f.read(&input[0], size);
         f.close();
-        ScannerGenerator();
+        std::fstream f{DFA_FILE_NAME, std::ios::in | std::ios::ate};
+        if(f.is_open()){
+            deserializeDFA(f);
+        }else{
+            ScannerGenerator();
+        }
         scanner_ = DFAState::states;
     }
 

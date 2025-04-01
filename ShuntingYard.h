@@ -11,6 +11,20 @@
 #include <string>
 using namespace std;
 class ShuntingYard{
+    static string &getString( vector<pair<tokenTypes, string>> &output, string & accumulator, tokenTypes type ) {
+        output.emplace_back(type, accumulator);
+        accumulator.clear();
+        return accumulator;
+    }
+
+    static string &getString(vector<tokenTypes> &vec, vector<pair<tokenTypes, string>> &output, string & accumulator) {
+        output.emplace_back(vec.front(), accumulator);
+        if(!vec.empty()){
+            vec.erase(vec.begin());
+        }
+        accumulator.clear();
+        return accumulator;
+    }
 
     static void accumulate(string& accumulator, queue<char>& output){
         for(char c: accumulator){
@@ -28,6 +42,7 @@ public:
         LAMBDA,
         PLUS = 43,
         MINUS = 45,
+        UMINUS = -7,
         LEFT_PAREN = 40,
         RIGHT_PAREN = 41,
         MULTIPLY = 42,
@@ -35,7 +50,7 @@ public:
         POWER = 94,
     };
 
-    static map<spec, pair<int, char>> Map;
+    static map<spec, tuple<int, tokenTypes, char>> Map;
 
     static queue<char> regexShunt(string workingString){
         queue output = queue<char>();
@@ -88,73 +103,84 @@ public:
         return output;
     }
 
-    static list<string> arithmeticShunt(string workingString){
-        list output = list<string>();
-        stack operators = stack<pair<spec, pair<int, char>>>();
+    static vector<pair<tokenTypes, string>> arithmeticShunt( vector<tokenTypes>& vec, string workingString){
+        auto output = vector<pair<tokenTypes, string>>();
+        stack operators = stack<pair<spec, tuple<int, tokenTypes, char>>>();
+        tokenTypes tokenType;
         char rawToken;
         string accumulator;
+        int count = 0;
+
         while(!workingString.empty()){ // while there are still characters to process
             rawToken = workingString.front(); // get first character
             if(iscntrl(rawToken)){
                 workingString = workingString.substr(2); // delete first character from the working string
+                vec.erase(vec.begin()); // endl is one token
+                if(!accumulator.empty() && workingString.empty()){
+                    output.emplace_back(vec.front(), accumulator);
+                    accumulator.clear();
+                    vec.erase(vec.begin());
+                }
                 continue;
             }
             workingString = workingString.substr(1); // delete first character from the working string
             auto it = Map.find((spec) rawToken);
             if(it == Map.end() ) { // if the token character is not an operator
                 accumulator += rawToken;
-            }else {
+            }else { // token is an operator
                 if(!accumulator.empty()) {
-                    output.push_back(accumulator);
-                    accumulator.clear();
+                    accumulator = getString(vec, output, accumulator);
                 }
-                while (!operators.empty() &&  operators.top().first != LEFT_PAREN &&
-                        ( operators.top().second.first > it->second.first || (it->second.first ==  operators.top().second.first && it->second.second =='l'))) {
-                    accumulator += ((char)  operators.top().first);
-                    operators.pop();
-                    output.push_back(accumulator);
-                    accumulator.clear();
+                if(it->first != LEFT_PAREN && it->first != RIGHT_PAREN){
+                    while (!operators.empty() && operators.top().first != LEFT_PAREN &&
+                           (get<0>(operators.top().second)> get<0>(it->second) ||
+                            (get<0>(it->second) == get<0>(operators.top().second) && get<2>(it->second) == 'l'))) {
+                        accumulator += ((char) operators.top().first);
+                        accumulator = getString(output, accumulator,
+                                                static_cast<tokenTypes>(get<1>(operators.top().second)));
+                        operators.pop();
+                    }
+                    operators.emplace(*it);
                 }
-                operators.push(*it);
                 if (it->first == LEFT_PAREN) {
-                    operators.push(*it);
+                    operators.emplace(*it);
                 } else if (it->first == RIGHT_PAREN) {
                     while (!operators.empty() && operators.top().first != LEFT_PAREN) {
                         if (operators.empty())
                             throw EACCES;
                         accumulator += (char)operators.top().first;
-                        output.push_back(accumulator);
-                        accumulator.clear();
+                        accumulator = getString(output, accumulator,
+                                                static_cast<tokenTypes>(get<1>(operators.top().second)));
                         operators.pop();
                     }
                     operators.pop(); // discard right paren )
                 }
+                ++count;
             }
             if(!accumulator.empty() && workingString.empty()){
-                output.push_back(accumulator);
-                accumulator.clear();
+                accumulator = getString(vec, output, accumulator);
             }
         }
         while(!operators.empty()){
             if (operators.top().first == LEFT_PAREN || operators.top().first == RIGHT_PAREN)
                 throw exception();
             accumulator += (char) operators.top().first;
-            output.push_back(accumulator);
+            accumulator = getString(output, accumulator, static_cast<tokenTypes>(get<1>(operators.top().second)));
             operators.pop();
-            accumulator.clear();
         }
         return output;
     }
 };
 
-map<ShuntingYard::spec, pair<int, char>> ShuntingYard::Map = map<ShuntingYard::spec, pair<int, char>>{
-        {PLUS,{0,'l'}},
-        {MINUS,{0,'l'}},
-        {MULTIPLY,{1,'l'}},
-        {DIVIDE,{1,'l'}},
-        {POWER,{2,'r'}},
-        {LEFT_PAREN, {3, 'l'} },
-        {RIGHT_PAREN, {3, 'l'} },
+map<ShuntingYard::spec, tuple<int, tokenTypes, char>> ShuntingYard::Map = map<ShuntingYard::spec, tuple<int, tokenTypes, char>>{
+        {PLUS,{0, OPERATOR,'l'}},
+        {UMINUS,{2, UNARY_MINUS,'r'}},
+        {MINUS,{0, OPERATOR,'l'}},
+        {MULTIPLY,{1, OPERATOR,'l'}},
+        {DIVIDE,{1, OPERATOR,'l'}},
+        {POWER,{2, OPERATOR,'r'}},
+        {LEFT_PAREN, {3, OPENPAREN ,'l'} },
+        {RIGHT_PAREN, {3,  CLOSEPAREN,'l'} },
 };
 
 #endif //ASSIGNMENT1_SHUNTINGYARD_H

@@ -2,61 +2,12 @@
 // Created by wilke on 2/19/2025.
 //
 
-/*REFERENCE (Gemini)
-#include <iostream>
-#include <vector>
-#include <map>
-
-enum class Symbol {
-    PLUS, NUMBER, EXPRESSION
-};
-
-struct Production {
-    Symbol lhs;
-    std::vector<Symbol> rhs;
-};
-
-int main() {
-    std::vector<Production> grammar = {
-        {Symbol::EXPRESSION, {Symbol::EXPRESSION, Symbol::PLUS, Symbol::NUMBER}},
-        {Symbol::EXPRESSION, {Symbol::NUMBER}}
-    };
-
-    std::map<Symbol, std::vector<std::vector<Symbol>>> grammarMap;
-    for (const auto& prod : grammar) {
-        grammarMap[prod.lhs].push_back(prod.rhs);
-    }
-
-    // Print the grammar
-    for (const auto& [lhs, rhs_list] : grammarMap) {
-        std::cout << "Production for: ";
-        if (lhs == Symbol::EXPRESSION) {
-            std::cout << "Expression" << std::endl;
-        }
-        for (const auto& rhs : rhs_list) {
-            std::cout << "  ::= ";
-            for (const auto& symbol : rhs) {
-                if (symbol == Symbol::PLUS) {
-                    std::cout << "+ ";
-                } else if (symbol == Symbol::NUMBER) {
-                    std::cout << "Number ";
-                } else if (symbol == Symbol::EXPRESSION) {
-                    std::cout << "Expression ";
-                }
-            }
-            std::cout << std::endl;
-        }
-    }
-
-    return 0;
-}
- * */
-
 #include <string>
 #include <iostream>
 #include <vector>
 #include <map>
 #include <set>
+#include "Optimizer.h"
 #include "main.cpp"
 
 using namespace std;
@@ -146,8 +97,8 @@ class ArithmeticParser:public Parser{
 private:
     explicit ArithmeticParser(vector<Production>& _grammar): Parser(){
         grammar = _grammar;
-        for (auto g : grammar) {
-            for (auto v: g.rhs) {
+        for (const auto &g : grammar) {
+            for (const auto & v: g.rhs) {
                 productions.push_back(v);
             }
         }
@@ -188,7 +139,7 @@ private:
 
     void getFirstSet(){
         vector<Symbol> arr;
-        for (auto p :SymbolToString::SymbolMap) {
+        for (const auto& p :SymbolToString::SymbolMap) {
             if (p.first >= MIN_TERMINAL){
                 arr.push_back(p.first);
             }
@@ -423,13 +374,14 @@ public:
         else return false;
     }
 
-    pair<int, string> skeletonParser(Tokenizer* t){
+    tuple<int, vector<tokenTypes>, string> skeletonParser(Tokenizer* t){ // refactor to include a vector that contains the token for each element in the string
         //TODO discard whitespace
         auto s = stack<Symbol>();
         auto token = t->nextToken();
         string ret = "";
+        auto vec = vector<tokenTypes>();
         if(endCheck(get<0>(token))){
-            return {0, ret};
+            return {0, vec, ret};
         }
         pair<tokenTypes, basic_string<char>>word = {(tokenTypes) get<1>(token), get<2>(token)};
         s.push(EOF_);
@@ -441,21 +393,30 @@ public:
             if((int) focus == (int) EOF_ && MatchSymbolToToken::reverse(token) == (int) EOF_){
                 // report success and return or break
                 ret += get<2>(token);
-                return {1, ret};
+                return {1, vec, ret};
             }
             else if (terminals.find(focus) != terminals.end()){ // EOF is a terminal so || focus == eof is implicit
                 if(MatchSymbolToToken::match(focus, word.first)){
                     s.pop();
-                    ret += get<2>(token);
+                    char last = ret.back();
+                    if(word.second == "-" &&(last == '\0' || last == '(' || last  == '*' || last == '-' || last == '+' || last == '^' || last == '/')){
+                        ret += (char) -7;
+                    }else{
+                        ret += get<2>(token);
+                    }
+                    if((tokenTypes) get<1>(token) == UNARY_MINUS || (tokenTypes) get<1>(token) == INT || (tokenTypes) get<1>(token) == FLOAT || (tokenTypes) get<1>(token) == NAME){
+                        vec.push_back((tokenTypes) get<1>(token));
+                    }
                     token = t->nextToken();
                     if(endCheck(get<0>(token))){
-                        return {0, ret};
+                        return {0, vec, ret};
                     }
                     word = {(tokenTypes) get<1>(token), get<2>(token)};
                 }
                 else{
                     //error when looking for symbol in focus
-                    return {2, "<Expected " + SymbolToString::getString(focus) + ", got token " + get<2>(token) + " with token type " + tokenIdstrings[get<1>(token)] + "\n"};
+                    while ((tokenTypes)get<1>(t->nextToken()) != ENDL && (tokenTypes)get<1>(t->nextToken()) != INT16_MAX){}
+                    return {2, vec, "<Expected " + SymbolToString::getString(focus) + ", got token " + ((get<2>(token) == "\r\n")?"\\r\\n":get<2>(token)) + " with token type " + tokenIdstrings[get<1>(token)]};
                 }
             }
             else{ // focus is nonterminal
@@ -471,13 +432,17 @@ public:
                     }
                 }else{
                     //error expanding focus.
-                    return {2, "<Could not expand focus at " + SymbolToString::getString(focus) + ", with token " + get<2>(token) + " of type " + tokenIdstrings[get<1>(token)] + "\n"};
+                    return {2, vec, "<Could not expand focus at " + SymbolToString::getString(focus) + ", with token " + ((get<2>(token) == "\r\n")?"\\r\\n":get<2>(token)) + " of type " + tokenIdstrings[get<1>(token)]};
                 }
             }
         }
     }
 
 };
+
+void optimize_and_print(int count, vector<vector<pair<tokenTypes, string>>> &validLines,
+                        tuple<int, vector<tokenTypes>, string> &parsedToken);
+
 ArithmeticParser* ArithmeticParser::singleton = nullptr;
 
 
@@ -549,29 +514,23 @@ int main(){
 
     Tokenizer t("LL1toIR.txt");
     int count = 1;
-    auto validLines = vector<list<string>>();
+    auto validLines = vector<vector<pair<tokenTypes, string>>>();
     while (true){
         // TODO
         auto parsedToken = p->skeletonParser(&t);
-        if(parsedToken.first == 1){
+        if(get<0>(parsedToken) == 1){
             // optimization and IR
             try {
-                validLines.push_back(ShuntingYard::arithmeticShunt(parsedToken.second));
-                cout << "Successfully parsed line " << count << ' '<< parsedToken.second << "Postfix: ";
-                for ( auto i : validLines.back()) {
-                    cout << i;
-                    //optimize here?
-                }
-                cout<<"\n";
+                optimize_and_print(t.line, validLines, parsedToken);
             }catch(exception &e) {
                 cout << e.what();
-                cout<< "imbalanced parenthesis in expression " << parsedToken.second;
+                cout<< "imbalanced parenthesis in expression " << get<2>(parsedToken) << '\n';
             }
 
-        }else if(parsedToken.first == 2){
-            cout << "Failed parsing line " << count << ' '<< parsedToken.second << "Postfix: ";
+        }else if(get<0>(parsedToken) == 2){
+            cout << "\nFailed line " << t.line << " "<< get<2>(parsedToken) << "\n";
         }else{
-            cout << "Successfully parsed line " << count << ' '<< parsedToken.second << "Postfix: ";
+            optimize_and_print(t.line, validLines, parsedToken);
             break;
         }
         ++count;
@@ -581,7 +540,24 @@ int main(){
     return 0;
 }
 
-/*"Classic" Arithmetic Parser from the book:
+void optimize_and_print(int count, vector<vector<pair<tokenTypes, string>>> &validLines,
+                        tuple<int, vector<tokenTypes>, string> &parsedToken) {
+    string s = get<2>(parsedToken).substr(0, get<2>(parsedToken).size() - 2); // remove CRLF newline Suffix
+    validLines.push_back(ShuntingYard::arithmeticShunt(get<1>(parsedToken), s));
+    cout << "Parsed line " << count << ", token:"<< s << " Postfix: ";
+    for (const auto & i : validLines.back()) {
+        cout << i.second << " ";
+    }
+    //optimize here
+    ArithmeticOptimizer::optimize(validLines.back());
+    cout << " Optimized: ";
+    for (const auto & i : validLines.back()) {
+        cout << i.second << " ";
+    }
+    cout<<"\n";
+}
+
+/*"Classic" Arithmetic Grammar from the book:
     auto Goal = Production{GOAL, {{EXPR}}};
     auto Expr = Production{EXPR, {{TERM, EXPR_PRIME}}};
     auto ExprPrime = Production{

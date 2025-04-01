@@ -3,4 +3,14 @@ project(assignment1)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(assignment1 LL1ArithmeticParser.cpp )
+add_executable(assignment1
+        LL1ArithmeticParser.cpp
+        Optimizer.h
+        ShuntingYard.h
+        DFASerializer.cpp
+        DFASerializer.h
+        Split.h
+        DFAState.h
+        main.cpp
+)
+
