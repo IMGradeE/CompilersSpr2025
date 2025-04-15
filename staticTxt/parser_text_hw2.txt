@@ -1,0 +1,72 @@
+1+-a
+-1 * var / -1
+2-3
+2 - 3
+2 - -3
+2- -3
+-2-3
+-2- -3
+-2 - -3
+(-2 - -3)
+( -2 - -3)
+-2-(-3)
+-2-( -3)
+-2 - (-3)
+-2 - (-3 - (4))
+-2 - (-3 - (4))
+-2 - ( -3 -( -4))
+-2-(-2-(-2-2))
+-2 - (-2 - (-2 - 2))
+-11-(-22 - (-33-(-44 - (-55 - (-66)))))
+g^h
+g ^ h
+3^3
+4 ^ 4
+3^3^3
+3^(3^3)
+5 + 4 * 3 ^ 2
+2--3
+2+-3
+184 +- 84
+
+Goal →	Decl
+|	name AfterName
+|	print GTermSign
+
+AfterName →	LineVarNameRemaining
+|	Expr
+
+Decl →	int32 NameDeclRemaining
+
+NameDeclRemaining →	name LineVarNameRemaining
+
+LineVarNameRemaining →	= Expr
+
+Expr →	LTermAddSub AddSub
+
+Power' →	GTermSign Power'
+
+LTermAddSub →	Power' MultDiv
+
+AddSub -> + Expr
+| - Expr
+|ϵ
+
+MultDiv → MultDivAndRightOp
+|ϵ
+
+MultDivAndRightOp →	* LTermAddSub
+|	div LTermAddSub
+
+Power' →	PowerAndRightOp
+|ϵ
+
+PowerAndRightOp → ^ Power'
+
+GTermSign →	GTerm
+| - GTerm
+
+GTerm →	( Expr )
+|name
+|num
+

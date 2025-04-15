@@ -11,6 +11,8 @@ enum tokenTypes{
     INT,
     FLOAT,
     NAME,
+    TYPE,
+    PRINT_,
     OPENPAREN,
     CLOSEPAREN,
     ENDL,
@@ -24,6 +26,8 @@ std::string tokenIdstrings[] = {
         "INT",
         "FLOAT",
         "NAME",
+        "TYPE",
+        "PRINT_",
         "OPENPAREN",
         "CLOSEPAREN",
         "ENDL",
@@ -35,24 +39,22 @@ enum Symbol{
     ANONYMOUS_START =  INT16_MIN,
     // anonymous non-terminals reside here
     GOAL = -255, // non-terminals
-    LINEFULL,
+    AFTERNAME,
+    NAMEDECLREM,
+    LINEVARNAMEREM,
     EXPR,
-    LTERM_ADD_SUB,
-    LTERM_MULT_DIV,
-    RTERM_ADD_SUB,
     RTERM_MULT_DIV,
+    LTERM_ADD_SUB,
     ADD_SUB,
     MULT_DIV,
     MULT_DIV_AND_RIGHT_OP,
     POWER_NT,
     POWER_AND_RIGHT_OP,
-    LTERM_POWER,
-    RTERM_POWER,
     GTERM_SIGN,
     GTERM,
-    PARENS,
-
     // terminals
+    PRINT = -10,
+    TYPE_,
     NUM = -6,
     NAME_,
     ERROR,
@@ -64,6 +66,7 @@ enum Symbol{
     DIVIDE = 47,
     LEFT_PAREN = 40,
     RIGHT_PAREN = 41,
+    ASSIGN = 61,
     POWER = 94,
 };
 
@@ -96,16 +99,22 @@ public:
                 return MULTIPLY;
             }else if(s == "^"){
                 return POWER;
-            }else if("/"){
+            }else if(s == "/"){
                 return DIVIDE;
+            }else if(s == "="){
+                return ASSIGN;
+            }else if(s == "<<"){
+                return PRINT;
             }
         }
+        return EOF_;
     }
 };
 std::multimap<Symbol, tokenTypes> MatchSymbolToToken::Map = std::multimap<Symbol, tokenTypes>{
         {NUM, INT},
         {NUM, FLOAT},
         {NAME_, NAME},
+        {TYPE_, TYPE},
         {ERROR, INVALID},
         {EOF_, ENDL},
         {EPSILON, ENDL},
@@ -114,14 +123,16 @@ std::multimap<Symbol, tokenTypes> MatchSymbolToToken::Map = std::multimap<Symbol
         {MULTIPLY, OPERATOR},
         {DIVIDE, OPERATOR},
         {POWER, OPERATOR},
+        {ASSIGN, OPERATOR},
+        {PRINT, PRINT_},
         {LEFT_PAREN, OPENPAREN},
         {RIGHT_PAREN, CLOSEPAREN},
-
 };
 std::map<tokenTypes, Symbol> MatchSymbolToToken::InvertedMap = std::map<tokenTypes, Symbol>{
         {INT, NUM},
         {FLOAT, NUM},
         {NAME, NAME_},
+        {TYPE, TYPE_},
         {INVALID,ERROR},
         {ENDL,EOF_},
         {OPENPAREN,LEFT_PAREN},
@@ -146,33 +157,35 @@ public:
 
 
 std::map<Symbol, std::string> SymbolToString::SymbolMap = std::map<Symbol, std::string>{{ ANONYMOUS_START,       "anon-nonterminal"},
-                                                                                        {LINEFULL, "LINEFULL"},
                                                                                          {GOAL,                  "GOAL"},
+                                                                                         {AFTERNAME,      "AFTERNAME"},
+                                                                                         {LINEVARNAMEREM, "LINEVARNAMEREM"},
+                                                                                         {NAMEDECLREM, "NAMEDECLREM"},
                                                                                          {EXPR,                  "EXPR"},
                                                                                          {LTERM_ADD_SUB,         "LTERM_ADD_SUB" },
-                                                                                         {LTERM_MULT_DIV,        "LTERM_MULT_DIV" },
-                                                                                         {RTERM_ADD_SUB,         "RTERM_ADD_SUB" },
                                                                                          {RTERM_MULT_DIV,        "RTERM_MULT_DIV" },
                                                                                          {ADD_SUB,               "ADD_SUB" },
                                                                                          {MULT_DIV,              "MULT_DIV" },
                                                                                          {MULT_DIV_AND_RIGHT_OP, "MULT_DIV_AND_RIGHT_OP" },
                                                                                          {POWER_NT,              "POWER_NT" },
                                                                                          {POWER_AND_RIGHT_OP,    "POWER_AND_RIGHT_OP" },
-                                                                                         {LTERM_POWER,           "LTERM_POWER" },
-                                                                                         {RTERM_POWER,           "RTERM_POWER" },
                                                                                          {GTERM_SIGN,            "GTERM_SIGN" },
                                                                                          {GTERM,                 "GTERM" },
-                                                                                         {PARENS,                "PARENS" },
+
+                                                                                         {PRINT,                 "<<"},
                                                                                          {NUM,                   "num"},
+                                                                                         {TYPE_,              "TYPE_"},
                                                                                          {NAME_,                 "name"},
                                                                                          {ERROR,                 "ERROR"},
                                                                                          {EOF_,                  "eof"},
                                                                                          {EPSILON,               "EPSILON"},
-                                                                                         {POWER,              "^"},
                                                                                          {PLUS,                  "+"},
                                                                                          {MINUS,                 "-"},
                                                                                          {MULTIPLY,              "*"},
                                                                                          {DIVIDE,                "/"},
                                                                                          {LEFT_PAREN,            "("},
-                                                                                         {RIGHT_PAREN,           ")"},};
+                                                                                         {RIGHT_PAREN,           ")"},
+                                                                                         {ASSIGN,                 "="},
+                                                                                         {POWER,                    "^"},
+                                                                                         };
 #endif //ASSIGNMENT1_GLOBALENUMS_H

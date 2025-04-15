@@ -4,9 +4,9 @@
 
 #ifndef ASSIGNMENT1_DFASTATE_H
 #define ASSIGNMENT1_DFASTATE_H
-#include "GlobalEnums.h"
+#include "../Util/GlobalEnums.h"
 
-
+using namespace std;
 class DFAState{
     static int statID;
 public:

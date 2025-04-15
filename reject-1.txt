@@ -1,0 +1,62 @@
+nasm -felf64 a.asm -o a.o;  gcc -m64 -o a.x a.o -lc -no-pie; ./a.x
+
+int32 oktobad1 = 1
+int32 oktobad1 = 666
+int32 bad1 = bad0
+numvar2 = 1234
+int32 int32 = 4555
+int32 float32 = 5555
+float32 float32 = 6666
+float32 int32 = 7777
+int32 good1 = 1
+int32 good2 = 2
+int32 bad2 = good1 = good2
+int32 ok1, bad4
+int32 bad4 = << good1
+float32 bad5 = 1.2.3
+float32 bad6 = 1.333_333
+float32 bad7 = 1. 3
+int32 bad8 = * + / y
+int32 bad9 = 3 + * 4
+int32 bad10 = ((a + b)
+int32 bad11 = (a + b))
+int32 bad12 = (
+int32 bad13 = )
+int32 bad14 = ()
+int32 bad15 = (.)
+int32 bad16 = + a -
+int32 bad17 = (3(4(5))) 
+int32 bad18 = 18.3()
+int32 bad19 = 123.45.6
+int32 bad20 = 42 42
+int32 bad21 = (a+b)+(c*d))
+int32 bad22 = ++1
+int32 bad23 = ++var
+int32 bad24 = +42
+int32 bad25 = +42 + +42
+int32 bad26 = var.0
+int32 bad27 = *var
+int32 bad28 = var 1
+int32 bad29 = (((( var1 + ) 18 )))
+int32 bad30 = (((((9+(2*(110-(30/2))))*8)+1000)/2))+(((3*3*3*3)+1)/2))
+int32 bad31 = a = b = c
+int32 bad32 = obj1.runMethod()
+int32 bad33 = printf("Hello, World!\n");
+int32 bad34 = return 0
+int32 bad35 = class Foo
+int32 bad36 = operator+()
+int32 bad37 = obj1.operator+(obj2)
+int32 bad38 = -------------------------------------------1
+int32 bad39 = --var
+int32 bad40 = --1
+int32 bad41 = 3+^4
+int32 bad42 = 34^
+int32 bad43 = ^34
+int32 bad44 = _underscore
+int32 bad45 = _var1 + _var2
+int32 bad46 = +42 + +42
+int32 bad47 = 2++3
+int32 bad48 = 2---a
+int32 bad49 = 2-- -a
+int32 bad50 = 2+++3
+int32 bad51 = 2-+a

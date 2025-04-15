@@ -6,12 +6,11 @@
 #include <list>
 #include <fstream>
 #include <set>
-#include "GlobalEnums.h"
+#include "../Util/GlobalEnums.h"
 #include "ShuntingYard.h"
-#include "DFASerializer.cpp"
+#include "../Util/DFASerializer.cpp"
 
 using namespace std;
-int epsilonInvocations = 0, deltaInvocations = 0, epsilonHelperInvocations = 0;
 
 // This is all for a scanner that isn't only for arithmetic.
 /*
@@ -84,10 +83,12 @@ string tokenIdstrings[] = {
 };*/
 
 string patternStrings[] = {
-        "-+/+\\*+^+\\+", // TODO right associativity
+        "-+/+\\*+^+\\++=",
         "(0+1+2+3+4+5+6+7+8+9).(0+1+2+3+4+5+6+7+8+9)*", // NUMBER,
         "(0+1+2+3+4+5+6+7+8+9)*.\\..(0+1+2+3+4+5+6+7+8+9)*",
         "(a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w+x+y+z+A+B+C+D+E+F+G+H+I+J+K+L+M+N+O+P+Q+R+S+T+U+V+W+X+Y+Z).((_)+(0+1+2+3+4+5+6+7+8+9)+(a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w+x+y+z+A+B+C+D+E+F+G+H+I+J+K+L+M+N+O+P+Q+R+S+T+U+V+W+X+Y+Z))*", // NAME
+        "(i.n.t+f.l.o.a.t).3.2",
+        "<.<",
         "\\(",
         "\\)",
         "\r.\n+\n.\r+\n+\r+\v+\f",// ENDL
@@ -227,7 +228,6 @@ pair<state*,state*> toNFA(queue<char> input){
 }
 
 set<state*> followEpsilonHelper(set<state*> parentTF){
-    ++epsilonHelperInvocations;
     if(parentTF.empty()){
         return parentTF;
     }else{
@@ -248,7 +248,6 @@ set<state*> followEpsilonHelper(set<state*> parentTF){
 }
 
 list<state*> followEpsilon(const list<state*>& stateList) {
-    ++epsilonInvocations;
     list<state*> epsilon = list<state*>(stateList);
     for (auto curr: stateList) {
         try {
@@ -272,7 +271,6 @@ list<state*> followEpsilon(const list<state*>& stateList) {
 }
 
 list<state*> Delta(const list<state*>& nState, char c) {
-    ++deltaInvocations;
     list<state*> ret;
     for (auto curr : nState) {
         try {
@@ -541,6 +539,7 @@ public:
                 }
             }
             auto token = scanner(input, scanner_);
+
             if (get<1>(token) == INVALID){
                 input = input.substr(1, input.length());
             }

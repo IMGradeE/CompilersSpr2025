@@ -11,14 +11,22 @@
 #include <string>
 using namespace std;
 class ShuntingYard{
-    static string &getString( vector<pair<tokenTypes, string>> &output, string & accumulator, tokenTypes type ) {
-        output.emplace_back(type, accumulator);
+    string &getString( vector<pair<tokenTypes, string>> &output, string & accumulator, tokenTypes type ) {
+        if (type == NAME){
+            output.emplace_back(type, "[rbp" + to_string(symTable->getSymbol(accumulator).stackOffset) + "]"); // accumulator is not a constant
+        } else{
+            output.emplace_back(type, accumulator); // accumulator is not a constant
+        }
         accumulator.clear();
         return accumulator;
     }
 
-    static string &getString(vector<tokenTypes> &vec, vector<pair<tokenTypes, string>> &output, string & accumulator) {
-        output.emplace_back(vec.front(), accumulator);
+    string &getString(vector<tokenTypes> &vec, vector<pair<tokenTypes, string>> &output, string & accumulator) {
+        if (vec.front() == NAME){
+            output.emplace_back(vec.front(), "[rbp" + to_string(symTable->getSymbol(accumulator).stackOffset) + "]"); // accumulator is not a constant
+        } else{
+            output.emplace_back(vec.front(), accumulator); // accumulator is not a constant
+        }
         if(!vec.empty()){
             vec.erase(vec.begin());
         }
@@ -33,7 +41,12 @@ class ShuntingYard{
         accumulator.clear();
     }
 public:
+    SymbolTable* symTable;
+    ShuntingYard(SymbolTable* s):symTable(s){}
+
     enum spec{ // OR, CONCAT, and STAR integer values can be compared to establish precedence between op symbols
+        PRINT = -10,
+        TYPE_ = -9,
         RPAREN = -6,
         LPAREN,
         OR,
@@ -47,6 +60,7 @@ public:
         RIGHT_PAREN = 41,
         MULTIPLY = 42,
         DIVIDE = 47,
+        ASSIGN = 61,
         POWER = 94,
     };
 
@@ -103,7 +117,7 @@ public:
         return output;
     }
 
-    static vector<pair<tokenTypes, string>> arithmeticShunt( vector<tokenTypes>& vec, string workingString){
+    vector<pair<tokenTypes, string>> arithmeticShunt( vector<tokenTypes>& vec, string workingString){
         auto output = vector<pair<tokenTypes, string>>();
         stack operators = stack<pair<spec, tuple<int, tokenTypes, char>>>();
         tokenTypes tokenType;
@@ -117,7 +131,11 @@ public:
                 workingString = workingString.substr(2); // delete first character from the working string
                 vec.erase(vec.begin()); // endl is one token
                 if(!accumulator.empty() && workingString.empty()){
-                    output.emplace_back(vec.front(), accumulator);
+                    if (vec.front() == NAME){
+                        output.emplace_back(vec.front(), "[rbp" + to_string(symTable->getSymbol(accumulator).stackOffset) + "]"); // accumulator is not a constant
+                    } else{
+                        output.emplace_back(vec.front(), accumulator); // accumulator is not a constant
+                    }
                     accumulator.clear();
                     vec.erase(vec.begin());
                 }
@@ -133,7 +151,7 @@ public:
                 }
                 if(it->first != LEFT_PAREN && it->first != RIGHT_PAREN){
                     while (!operators.empty() && operators.top().first != LEFT_PAREN &&
-                           (get<0>(operators.top().second)> get<0>(it->second) ||
+                           (get<0>(operators.top().second) > get<0>(it->second) ||
                             (get<0>(it->second) == get<0>(operators.top().second) && get<2>(it->second) == 'l'))) {
                         accumulator += ((char) operators.top().first);
                         accumulator = getString(output, accumulator,
@@ -173,14 +191,17 @@ public:
 };
 
 map<ShuntingYard::spec, tuple<int, tokenTypes, char>> ShuntingYard::Map = map<ShuntingYard::spec, tuple<int, tokenTypes, char>>{
-        {PLUS,{0, OPERATOR,'l'}},
-        {UMINUS,{2, UNARY_MINUS,'r'}},
-        {MINUS,{0, OPERATOR,'l'}},
-        {MULTIPLY,{1, OPERATOR,'l'}},
-        {DIVIDE,{1, OPERATOR,'l'}},
-        {POWER,{2, OPERATOR,'r'}},
-        {LEFT_PAREN, {3, OPENPAREN ,'l'} },
-        {RIGHT_PAREN, {3,  CLOSEPAREN,'l'} },
+        {RIGHT_PAREN, {5,  CLOSEPAREN,'l'} },
+        {LEFT_PAREN, {5, OPENPAREN ,'l'} },
+        {POWER,{4, OPERATOR,'r'}},
+        {TYPE_, {4, TYPE, 'r'}},
+        {UMINUS,{4, UNARY_MINUS,'r'}},
+        {DIVIDE,{3, OPERATOR,'l'}},
+        {MULTIPLY,{3, OPERATOR,'l'}},
+        {MINUS,{1, OPERATOR,'l'}},
+        {PLUS,{1, OPERATOR,'l'}},
+        {PRINT, {0, PRINT_,'l'}},
+        {ASSIGN, {-1, OPERATOR, 'r'}},
 };
 
 #endif //ASSIGNMENT1_SHUNTINGYARD_H

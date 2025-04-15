@@ -15,3 +15,13 @@ z-y
 2 * 2 + 5 * 5
 5 / 0
 42
+
+
+Power' →	PowerAndRightOp
+|	.
+PowerAndRightOp →	^ RTermMultDiv.
+GTermSign →	GTerm
+|	- GTerm.
+GTerm →	( Expr )
+|	name
+|	num.

@@ -1,15 +1,15 @@
 //
 // Created by wilke on 4/1/2025.
 //
-
-#ifndef ASSIGNMENT1_DFASERIALIZER_H
-#define ASSIGNMENT1_DFASERIALIZER_H
 #include <cstdlib>
 #include <vector>
 #include <map>
 #include <fstream>
-#include "DFAState.h"
+#include "../FrontEnd/DFAState.h"
 #include "Split.h"
+
+#ifndef ASSIGNMENT1_DFASERIALIZER_H
+#define ASSIGNMENT1_DFASERIALIZER_H
 
 const std::string DFA_FILE_NAME = "DFA.txt";
 
