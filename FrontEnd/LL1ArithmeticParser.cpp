@@ -468,9 +468,11 @@ ArithmeticParser* ArithmeticParser::singleton = nullptr;
 
 int main(){
     auto grammar = vector<Production>({
-        Production {GOAL, {{TYPE_, NAMEDECLREM},
-                {NAME_, AFTERNAME},
-                {PRINT, GTERM_SIGN},}},
+        Production {GOAL, {
+            {TYPE_, NAMEDECLREM},
+        {NAME_, AFTERNAME},
+        {PRINT, GTERM_SIGN},
+            {EOF_}}},
         Production {AFTERNAME, {{LINEVARNAMEREM},
                 {EXPR}}},
         Production {NAMEDECLREM,{{NAME_, LINEVARNAMEREM},}},
@@ -501,8 +503,10 @@ int main(){
 
     int count = 1;
     auto validLines = vector<vector<pair<tokenTypes, string>>>();
-
-    Tokenizer t("accept-7.txt");
+    string fname;
+    cout << "\n\n\tPlease input the name of the file you would like to compile to NASM: ";
+    cin >> fname;
+    Tokenizer t(fname);
     SymbolTable symTable;
     NASMGenerator gen;
     ArithmeticOptimizer opti(&symTable, gen);

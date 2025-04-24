@@ -499,8 +499,11 @@ public:
 
     Tokenizer(string fileName){
         f.open(fileName);
-        if(!f.is_open()) {
-            cout<< "The file referenced in the CLI arguments did not exist in the current directory. Resolve this issue and try again.";
+        string fn;
+        while(!f.is_open()) {
+            cout<< "The filename referenced did not exist in the current directory. Resolve this issue and try again.\n";
+            cin >> fn;
+            f.open(fn);
         }
         f.seekg(0,ios::end);
         size = f.tellg();

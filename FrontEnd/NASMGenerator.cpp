@@ -42,13 +42,14 @@ fmtfloatin: db "%f", 0
 using namespace std;
 class NASMGenerator{
     const string scratch_int_registers[6] = { "ecx", "edx", "r8d", "r9d","r10d","r11d"};
-    map<const string, string> register_map = map<const string, string>();
+    std::map<const string, string> register_map = map<const string, string>();
 
     const string func_return_register = "eax";
     const string param_registers[2] = {"esi", "edi"};
 
     ofstream f;
-    string preamble = "\tsection .data\n\n"
+    string preamble = "\tsection .data\n"
+                      "\n"
                       "msg: db \"Hello, this is my string\", 0\n"
                       "fmtstr: db \"%s\", 10, 0\n"
                       "fmtint: db \"%d\", 10, 0\n"
@@ -56,13 +57,15 @@ class NASMGenerator{
                       "fmtuintin: db \"%d\", 0\n"
                       "fmtfloatin: db \"%f\", 0\n"
                       "float1: dd 0.0\n"
-                      "\tsection .text\n\n"
+                      "\tsection .text\n"
+                      "\n"
                       "\textern printf\n"
                       "\textern scanf\n"
                       "\tglobal main\n"
                       "main:\n"
                       "\tpush rbp\n"
-                      "\tmov rbp, rsp\n";
+                      "\tmov rbp, rsp\n"
+                      "\tsub rsp, 4096\n";
 
 public:
 

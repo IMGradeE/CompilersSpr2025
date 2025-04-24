@@ -13,6 +13,7 @@
 
 
 class ArithmeticOptimizer{
+    int loopNumber = 0;
     std::string calculate_value(int a, const int b, const char c){
         switch ((Symbol) c) {
             case MINUS:
@@ -43,33 +44,51 @@ class ArithmeticOptimizer{
         }
         switch ((Symbol) c) {
             case MINUS:
-                nsg.write("mov eax, "+a+"\n"
-                                "sub eax,"+ to_string(b)+"\n"); // eax = a-b
+                nsg.write("\tmov eax, "+a+"\n"
+                                "\tsub eax, "+ to_string(b)+"\n"); // eax = a-b
                 break;
             case MULTIPLY:
-                nsg.write("mov eax, "+a+"\n"
-                                "mov edi,"+ to_string(b)+"\n"
-                                "mul edi\n"); // eax = a*b
+                nsg.write("\tmov eax, "+a+"\n"
+                                "\tmov edi, "+ to_string(b)+"\n"
+                                "\timul edi\n"); // eax = a*b
                 break;
             case DIVIDE:
                 if(b == 0){
-                    nsg.write("mov esi, div_by_0\n"
-                           "mov edi, fmtstr\n"
-                           "print esi, edi\n");
+                    nsg.write("\tmov esi, div_by_0\n"
+                           "\tmov edi, fmtstr\n"
+                           "\tprint esi, edi\n");
                 }else{
                     nsg.write("mov edx,0\n"
-                              "mov eax, "+a+"\n"
-                              "mov esi,"+to_string(b)+"\n"
-                              "div esi\n"); // eax = a/b ; quotient in eax, remainder in edx
+                              "\tmov eax, "+a+"\n"
+                              "\tmov esi, "+to_string(b)+"\n"
+                              "\tcdq\n"
+                              "\tidiv esi\n"); // eax = a/b ; quotient in eax, remainder in edx
                 }
                 break;
             case PLUS:
-                nsg.write("mov eax, "+a+"\n"
-                                "add eax,"+ to_string(b)+"\n"); // eax = a+b
+                nsg.write("\tmov eax, "+a+"\n"
+                                "\tadd eax, "+ to_string(b)+"\n"); // eax = a+b
                 break;
             case ASSIGN:
-                nsg.write("mov "+a+", "+ to_string(b)+"\n");
+                nsg.write("\tmov "+a+", "+ to_string(b)+"\n");
                 return "";
+            case POWER:
+                if(b > 1) {
+                    ++this->loopNumber;
+                    nsg.write(
+                        "\tmov esi, " + a + ";loop preamble for exponentiation\n"
+                        "\tmov eax, " + a + "\n"
+                        "\tmov r8d, " + to_string(b) + "\n"
+                        "exploop" +to_string(this->loopNumber) + ":\n"
+                        "\timul esi\n"
+                        "\tsub r8d, 1\n"
+                        "\tcmp r8d, 1\n"
+                        "\tjne exploop" +to_string(this->loopNumber) + "\n"
+                    );
+                }else{
+                    nsg.write("\tmov eax, "+a+"\n");
+                }
+                break;
         }
         return "eax";
     }
@@ -83,22 +102,59 @@ class ArithmeticOptimizer{
         }
         switch ((Symbol) c) {
             case MINUS:
-                nsg.write("mov eax, "+ to_string(a)+"\n"
-                                        "sub eax,"+b+"\n"); // eax = a-b
-                break;
+                nsg.write("\tmov r8d, "+ to_string(a)+"\n"
+                                        "\tsub r8d,"+b+"\n"); // eax = a-b
+                return "r8d";
             case MULTIPLY:
-                nsg.write("mov eax, "+ to_string(a)+"\n"
-                                        "mov edi,"+b+"\n"
-                                         "mul edi\n"); // eax = a*b
-                break;
+                nsg.write("\tmov eax, "+ to_string(a)+"\n"
+                                        "\tmov edi, "+b+"\n"
+                                         "\timul edi\n"
+                                         "\tmov r9d, eax\n"); // eax = a*b
+                return "r9d";
             case DIVIDE:
-                nsg.write("mov edx,0\n"
-                                "mov eax, "+to_string(a)+"\n"
-                                "div "+b+"\n"); // eax = a/b ; quotient in eax, remainder in edx Todo might need register
-                break;
+                nsg.write("\tmov edx, 0\n"
+                                "\tmov eax, "+to_string(a)+"\n"
+                                "\tcdq\n"
+                                "\tidiv "+b+"\n"
+                               "\tmov r10d, eax\n"); // eax = a/b ; quotient in eax, remainder in edx Todo might need register
+                return "r10d";
             case PLUS:
-                nsg.write("mov eax, "+to_string(a)+"\n"
-                                "add eax,"+b+"\n"); // eax = a+b
+                if(b != "r8d") {
+                    nsg.write("\tmov r8d, " + to_string(a) + "\n"
+                                                            "\tadd r8d, " + b + "\n"); // eax = a+b
+                    return "r8d";
+                }else{
+                    nsg.write("\tmov r11d, " + to_string(a) + "\n"
+                                                             "\tadd r11d, " + b + "\n");
+                    return "r11d";
+                }
+            case POWER:
+                ++this->loopNumber;
+                nsg.write(
+                    "\tcmp dword "+b+", 0\n" // if  0 set eax to 1 and return it. else if exponent is 1, return a in eax, else loop
+                           "\tjle zeroExpCond"+to_string(this->loopNumber)+"\n" //we're not handling negative exponents
+                           "\tcmp dword "+b+", 1\n" // if  0 set eax to 1 and return it. else if exponent is 1, return a in eax, else loop
+                           "\tje zeroExpCondElse"+to_string(this->loopNumber)+"\n"
+                          "\tjmp preloop"+to_string(this->loopNumber)+"\n"
+                        "zeroExpCond"+to_string(this->loopNumber)+":\n" // should do this via a single label that jumps to a dynamic label but this also works.
+                            "\tmov eax, 1\n"
+                            "\tjmp afterloop"+to_string(this->loopNumber)+"\n"
+                        "zeroExpCondElse"+to_string(this->loopNumber)+":\n"
+                          "\tmov eax, " + to_string(a) + ";loop preamble for exponentiation\n" // this should really have a conditional jump after but idc this works
+                          "\tjmp afterloop"+to_string(this->loopNumber)+"\n"
+                        "\tpreloop"+to_string(this->loopNumber)+":\n"
+                        "\tmov eax, " + to_string(a) + ";loop preamble for exponentiation\n"
+                        "\tmov esi, " + to_string(a) + "\n"
+                        "\tmov r8d, "+ b + "\n"
+                        "exploop" +to_string(this->loopNumber) + ":\n"
+                        "\timul esi\n"
+                        "\tsub r8d, 1\n"
+                        "\tcmp r8d, 1\n" // todo maybe needs to be one
+                        "\tjne exploop" +to_string(this->loopNumber) + "\n"
+                        "afterloop"+to_string(this->loopNumber)+":\n"
+                );
+
+
                 break;
         }
         return "eax";
@@ -109,35 +165,69 @@ class ArithmeticOptimizer{
         // todo fix this it's definitely broken
         switch ((Symbol) c) {
             case MINUS:
-                nsg.write("mov eax, "+a+"\n"
-                                 "sub eax, "+b+"\n"); // eax = a-b
-                break;
+                nsg.write("\tmov eax, "+a+"\n"
+                                 "\tsub eax, "+b+"\n"
+                                 "\tmov r8d, eax\n"); // eax = a-b
+                return "r8d";
             case MULTIPLY:
-                nsg.write("mov eax, "+a+"\n"
-                                "mov edi,"+b+"\n"
-                                 "mul edi\n"); // eax = a*b
-                break;
+                nsg.write("\tmov eax, "+a+"\n"
+                                "\tmov edi, "+b+"\n"
+                                 "\timul edi\n"
+                                 "\tmov r9d, eax\n"); // eax = a*b
+                return "r9d";
             case DIVIDE:
                     if (b[0] == '['){
-                        string x = "dword " + b;
+                        string x = "\tdword " + b;
                         b = x;
                     }
-                    nsg.write("mov edx,0\n"
-                              "mov eax, "+a+"\n"
-                                "div "+b+"\n"); // eax = a/b ; quotient in eax, remainder in edx
-                break;
+                    nsg.write("\tmov edx,0\n"
+                              "\tmov eax, "+a+"\n"
+                                "\tcdq\n"
+                                "\tidiv "+b+"\n"
+                                           "\tmov r10d, eax\n"); // eax = a/b ; quotient in eax, remainder in edx
+                return "r10d";
             case PLUS:
-                nsg.write("mov "+a+",eax\n"
-                                    "add eax,"+b+"\n"); // eax = a+b
-                break;
+                nsg.write("\tmov r11d, "+a+"\n"
+                                    "\tmov edi, "+b+"\n"
+                                    "\tadd r11d, edi\n"); // eax = a+b
+                return "r11d";
             case ASSIGN:
                 if (b[0] == '['){
-                    nsg.write("mov eax, "+b+"\n"
-                                    "mov "+a+", eax\n");
+                    nsg.write("\tmov eax, "+b+"\n"
+                                    "\tmov "+a+", eax\n");
                 }else{
-                    nsg.write("mov "+a+", "+b+"\n");
+                    nsg.write("\tmov "+a+", "+b+"\n");
                 }
                 return "";
+
+            case POWER:
+                ++this->loopNumber;
+                ++this->loopNumber;
+                nsg.write(
+                    "\tcmp dword "+b+", 0\n" // if  0 set eax to 1 and return it. else if exponent is 1, return a in eax, else loop
+                    "\tjle zeroExpCond"+to_string(this->loopNumber)+"\n" //we're not handling negative exponents
+                    "\tcmp dword "+b+", 1\n" // if  0 set eax to 1 and return it. else if exponent is 1, return a in eax, else loop
+                    "\tje zeroExpCondElse"+to_string(this->loopNumber)+"\n"
+                    "\tjmp preloop"+to_string(this->loopNumber)+"\n"
+                    "zeroExpCond"+to_string(this->loopNumber)+":\n" // should do this via a single label that jumps to a dynamic label but this also works.
+                    "\tmov eax, 1\n"
+                    "\tjmp afterloop"+to_string(this->loopNumber)+"\n"
+                    "zeroExpCondElse"+to_string(this->loopNumber)+":\n"
+                    "\tmov eax, " + a + ";loop preamble for exponentiation\n" // this should really have a conditional jump after but idc this works
+                    "\tjmp afterloop"+to_string(this->loopNumber)+"\n"
+                    "\tpreloop"+to_string(this->loopNumber)+":\n"
+                    "\tmov eax, " + a + ";loop preamble for exponentiation\n"
+                    "\tmov esi, " + a + "\n"
+                    "\tmov r8d, "+ b + "\n"
+                    "exploop" +to_string(this->loopNumber) + ":\n"
+                    "\timul esi\n"
+                    "\tsub r8d, 1\n"
+                    "\tcmp r8d, 1\n" // todo maybe needs to be one
+                    "\tjne exploop" +to_string(this->loopNumber) + "\n"
+                    "afterloop"+to_string(this->loopNumber)+":\n"
+                );
+
+                break;
         }
         return "eax";
     }
@@ -235,8 +325,11 @@ public:
          *              Remove the two number-convertible strings, and replace the operator string with the result of the operation.
          *          Else break.
          * */
-
-
+        string str = ";";
+        for (auto x: postfix) {
+            str += x.second;
+        }
+        nsg.write(str);
         if (postfix.size() == 1 || postfix.size() == 0){
             // do nothing
             return;
@@ -251,12 +344,9 @@ public:
 
                         tokenTypes back_one_type = postfix[back_one].first;
                         if(back_one_type == NAME){
-                            if (postfix[back_one].second[0] == '['){
-                                string x = "dword " + postfix[back_one].second;
-                                nsg.write("NEG "+x+"\n");
-                            }else{
-                                nsg.write("NEG "+postfix[back_one].second+"\n");
-                            }
+                            nsg.write("\tmov r11d, "+postfix[back_one].second+"\n"
+                                      "\tNEG r11d\n");
+                            postfix[back_one].second = "r11d";
                         }else{
                             postfix[back_one].second = "-" + postfix[back_one].second;
                         }
@@ -268,7 +358,6 @@ public:
                 else if(postfix[i].first == PRINT_){
                     nsg.write("\tmov esi, "+postfix[back_one].second+"\n"
                               "\tmov edi, fmtint\n"
-                           "\tmov eax, 0 ; I don't know if this is necessary\n"
                            "\tcall printf\n");
                     auto printed = postfix.begin();
                     auto call = postfix.begin();
