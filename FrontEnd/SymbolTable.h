@@ -6,7 +6,7 @@
 #include <string>
 #include <tuple>
 #include <map>
-
+#include <exception>
 
 class SymbolTableEntry{
 public:

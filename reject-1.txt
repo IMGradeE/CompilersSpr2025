@@ -1,21 +1,30 @@
-nasm -felf64 a.asm -o a.o;  gcc -m64 -o a.x a.o -lc -no-pie; ./a.x
-
 int32 oktobad1 = 1
 int32 oktobad1 = 666
+
 int32 bad1 = bad0
-numvar2 = 1234
-int32 int32 = 4555
+
+numvar2 = 1234 
+
+int32 int32 = 4555 
+
 int32 float32 = 5555
+
 float32 float32 = 6666
+
 float32 int32 = 7777
+
 int32 good1 = 1
 int32 good2 = 2
 int32 bad2 = good1 = good2
+
 int32 ok1, bad4
+
 int32 bad4 = << good1
+
 float32 bad5 = 1.2.3
 float32 bad6 = 1.333_333
-float32 bad7 = 1. 3
+float32 bad7 = 1. 3 
+
 int32 bad8 = * + / y
 int32 bad9 = 3 + * 4
 int32 bad10 = ((a + b)
